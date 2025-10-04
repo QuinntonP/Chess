@@ -42,6 +42,13 @@ public class Board {
     }
 
 
+    public void movePiece(int from, int to){
+        Piece piece = getPieceAtSquare(from);
+
+        setBitboardBit(piece, from, false);
+        setBitboardBit(piece, to, true);
+    }
+
 
     public void setBitboardBit(Piece piece, int square, boolean set) {
         long mask = 1L << square;
