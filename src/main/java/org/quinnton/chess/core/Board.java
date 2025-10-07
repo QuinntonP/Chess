@@ -42,7 +42,7 @@ public class Board {
     }
 
 
-    public void movePiece(int from, int to){
+    public void makeMove(int from, int to){
         Piece piece = getPieceAtSquare(from);
 
         setBitboardBit(piece, from, false);

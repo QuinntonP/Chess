@@ -7,10 +7,12 @@ import javafx.scene.Scene;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import org.quinnton.chess.core.*;
-
+import java.util.HashSet;
 import java.util.Set;
 
 public class Main extends Application {
+    MoveList legalMoves;
+
     @Override
     public void start(Stage stage) {
         Board board = new Board();
@@ -23,33 +25,14 @@ public class Main extends Application {
         stage.setTitle("Chess");
         stage.show();
 
-        final int[] selectedSq = { -1 };
+        // clicking logic
+        SelectionController controller = new SelectionController(board, view);
 
         view.canvas.setOnMouseClicked(e -> {
             int sq = Utils.intFromCoordinates(e.getX(), e.getY(), view.getSquareSize());
-            if (selectedSq[0] == -1) {
-                Piece p = board.getPieceAtSquare(sq);
-                if (p != null) {
-                    selectedSq[0] = sq;
-                    view.setHighlights(Set.of(selectedSq[0]));
-                } else view.clearHighlights();
-                return;
-            }
-
-            int first = selectedSq[0];
-            Piece firstPiece = board.getPieceAtSquare(first);
-            Piece secondPiece = board.getPieceAtSquare(sq);
-
-            if (secondPiece != null && firstPiece != null && secondPiece.white == firstPiece.white) {
-                selectedSq[0] = sq;
-                view.setHighlights(Set.of(selectedSq[0]));
-                return;
-            }
-
-            MoveList legalMoves = MoveGen.generate(first);
-            selectedSq[0] = -1;
-            view.clearHighlights();
+            controller.onSquareClick(sq);
         });
+
 
         view.draw();
 

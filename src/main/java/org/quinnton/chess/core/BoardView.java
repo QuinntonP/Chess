@@ -9,7 +9,6 @@ import java.util.Set;
 
 public class BoardView {
     private final Board board;
-    private final int canvasSize;
     public final Canvas canvas;
     private final Color color1;
     private final Color color2;
@@ -20,7 +19,6 @@ public class BoardView {
 
     public BoardView(Board board, int canvasSize, Color color1, Color color2, Color color3) {
         this.board = board;
-        this.canvasSize = canvasSize;
         this.canvas = new Canvas(canvasSize, canvasSize);
         this.color1 = color1;
         this.color2 = color2;
