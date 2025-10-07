@@ -2,7 +2,7 @@ package org.quinnton.chess.core;
 
 public final class MoveGen {
 
-    public static MoveList generate(){
+    public static MoveList generate(int curSquare){
         MoveList list = new MoveList();
 
         return  list;
