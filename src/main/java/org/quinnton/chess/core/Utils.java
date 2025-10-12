@@ -1,5 +1,7 @@
 package org.quinnton.chess.core;
 
+import java.util.ArrayList;
+
 import static java.lang.Math.abs;
 
 public class Utils {
@@ -17,4 +19,20 @@ public class Utils {
 
         return Math.toIntExact(Math.round(xSquare + (ySquare * 8)));
     }
+
+    /**
+     *
+     * @param bitboard bitboard
+     * @return extracted squares in a list
+     */
+    public static ArrayList<Integer> extractSquares(long bitboard) {
+        ArrayList<Integer> squares = new ArrayList<>(8);
+        while (bitboard != 0) {
+            int sq = Long.numberOfTrailingZeros(bitboard);
+            squares.add(sq);
+            bitboard &= bitboard - 1;
+        }
+        return squares;
+    }
+
 }

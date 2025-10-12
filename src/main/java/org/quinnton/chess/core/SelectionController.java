@@ -7,12 +7,17 @@ public class SelectionController {
     private final Board board;
     private final BoardView view;
 
+    private final Masks masks;
+
     private Integer selectedFrom = null;
     private MoveList legalMoves = null;
 
-    public SelectionController(Board board, BoardView view) {
+
+
+    public SelectionController(Board board, BoardView view, Masks masks) {
         this.board = board;
         this.view = view;
+        this.masks = masks;
     }
 
     public void onSquareClick(int sq) {
@@ -21,7 +26,7 @@ public class SelectionController {
         if (selectedFrom == null) {
             if (clicked == null) return;
             selectedFrom = sq;
-            legalMoves = MoveGen.generate(selectedFrom, clicked);
+            legalMoves = MoveGen.generate(board, selectedFrom, clicked, masks);
             showHighlights();
             return;
         }
@@ -30,7 +35,7 @@ public class SelectionController {
 
         if (clicked != null && fromPiece != null && clicked.white == fromPiece.white) {
             selectedFrom = sq;
-            legalMoves = MoveGen.generate(selectedFrom, clicked);
+            legalMoves = MoveGen.generate(board, selectedFrom, clicked, masks);
             showHighlights();
             return;
         }
@@ -44,14 +49,13 @@ public class SelectionController {
 
     private void showHighlights() {
         Set<Integer> squares = new HashSet<>();
-        for (int i = 0; i < legalMoves.size(); i++) squares.add(legalMoves.get(i).to);
+        for (Move legalMove : legalMoves) squares.add(legalMove.to);
         squares.add(selectedFrom);
         view.setHighlights(squares);
     }
 
     private boolean isLegalDestination(int sq) {
-        for (int i = 0; i < legalMoves.size(); i++)
-            if (legalMoves.get(i).to == sq) return true;
+        for (Move legalMove : legalMoves) if (legalMove.to == sq) return true;
         return false;
     }
 

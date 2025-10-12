@@ -44,9 +44,14 @@ public class Board {
 
     public void makeMove(int from, int to){
         Piece piece = getPieceAtSquare(from);
+        Piece toPiece = getPieceAtSquare(to);
 
         setBitboardBit(piece, from, false);
         setBitboardBit(piece, to, true);
+
+        if (toPiece != null){
+            setBitboardBit(toPiece, to, false);
+        }
     }
 
 

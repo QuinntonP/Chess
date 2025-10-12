@@ -7,16 +7,17 @@ import javafx.scene.Scene;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import org.quinnton.chess.core.*;
-import java.util.HashSet;
-import java.util.Set;
 
 public class Main extends Application {
     MoveList legalMoves;
 
     @Override
     public void start(Stage stage) {
+        // setup
         Board board = new Board();
         board.loadFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
+
+        Masks masks = new Masks();
 
         int canvasSize = 800;
         BoardView view = new BoardView(board, canvasSize, Color.BEIGE, Color.TAN, Color.CORNFLOWERBLUE);
@@ -26,7 +27,7 @@ public class Main extends Application {
         stage.show();
 
         // clicking logic
-        SelectionController controller = new SelectionController(board, view);
+        SelectionController controller = new SelectionController(board, view, masks);
 
         view.canvas.setOnMouseClicked(e -> {
             int sq = Utils.intFromCoordinates(e.getX(), e.getY(), view.getSquareSize());
