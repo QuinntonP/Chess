@@ -1,6 +1,5 @@
 package org.quinnton.chess.core;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 
 public class Masks {
@@ -10,6 +9,17 @@ public class Masks {
 
     // precomputed masks such as FILE_A, NOT_A_FILE, RANK_2, etc.
     static HashMap<Integer, Long> knightMoves = new HashMap<>();
+    static HashMap<Integer, Long> kingMoves = new HashMap<>();
+
+    // Move Masks
+    public static long QUEEN_MOVE_MASK = 0;
+    public static long KING_MOVE_MASK = 0;
+    public static long BISHOP_MOVE_MASK = 0;
+    public static long KNIGHT_MOVE_MASK = 0;
+    public static long ROOK_MOVE_MASK = 0;
+    public static long PAWN_MOVE_MASK = 0;
+
+
     // --- File masks ---
     public static final long FILE_A = 0x0101010101010101L;
     public static final long FILE_B = 0x0202020202020202L;
@@ -30,12 +40,19 @@ public class Masks {
     public static final long RANK_7 = 0x00FF000000000000L;
     public static final long RANK_8 = 0xFF00000000000000L;
 
+    public static final long NOT_FILE_A  = ~FILE_A;
+    public static final long NOT_FILE_H  = ~FILE_H;
+    public static final long NOT_FILE_AB = ~(FILE_A | FILE_B);
+    public static final long NOT_FILE_GH = ~(FILE_G | FILE_H);
+
+
+    public static final long[] RANKS = {RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8};
+    public static final long[] FILES = {FILE_A, FILE_B, FILE_C, FILE_D, FILE_E, FILE_F, FILE_G, FILE_H};
+
     // --- Useful composite masks ---
     public static final long EDGES = FILE_A | FILE_H | RANK_1 | RANK_8;
 
-    // Optional convenience masks
-    public static final long NOT_A_FILE = 0xFEFEFEFEFEFEFEFEL;
-    public static final long NOT_H_FILE = 0x7F7F7F7F7F7F7F7FL;
+
 
     // Pre generate tables
     private static final int[][] KNIGHT_DIRS = {
@@ -43,7 +60,46 @@ public class Masks {
             {-2,-1}, {-1,-2}, { 1,-2}, { 2,-1}
     };
 
-    private static HashMap<Integer, Long> generateKnightMoves() {
+    private static final int[][] KING_DIRS = {
+            {-1, 0}, {-1, 1}, {0, 1}, {1, 1},
+            {1, 0}, {1, -1}, {0, -1}, {-1, -1}
+    };
+
+
+    public long getRookMoveMask(long blockerMask){
+
+        return 1L;
+    }
+
+
+    private void generateRookMoves(){
+
+    }
+
+
+    private static void generateKingMoves() {
+        HashMap<Integer, Long> moves = new HashMap<Integer, Long>(64);
+
+        for (int sq = 0; sq < 64; sq++) {
+            int rank = sq / 8;
+            int file = sq % 8;
+            long mask = 0L;
+
+            for (int[] d : KING_DIRS) {
+                int r = rank + d[0];
+                int f = file + d[1];
+                if (r >= 0 && r < 8 && f >= 0 && f < 8) {
+                    int targetSquare = r * 8 + f;
+                    mask |= (1L << targetSquare);
+                }
+            }
+            moves.put(sq, mask);
+        }
+        kingMoves = moves;
+    }
+
+
+    private static void generateKnightMoves() {
         HashMap<Integer, Long> moves = new HashMap<Integer, Long>(64);
 
         for (int sq = 0; sq < 64; sq++) {
@@ -61,14 +117,9 @@ public class Masks {
             }
             moves.put(sq, mask);
         }
-        return moves;
+        knightMoves = moves;
     }
 
-
-
-    public static void setKnightMoves(){
-        knightMoves = generateKnightMoves();
-    }
 
     public long getKnightMoves(int sq){
         return this.knightMoves.get(sq);
@@ -76,7 +127,22 @@ public class Masks {
 
     public static void onload(){
         generateKnightMoves();
-        setKnightMoves();
+        generateKingMoves();
+    }
 
+    public long getKingMoves(int sq) {
+        return this.kingMoves.get(sq);
+    }
+
+
+    public void setMoveMask(Piece piece, long mask){
+        switch (piece){
+            case WP, BP -> PAWN_MOVE_MASK = mask;
+            case WN, BN -> KNIGHT_MOVE_MASK = mask;
+            case WB, BB -> BISHOP_MOVE_MASK = mask;
+            case WR, BR -> ROOK_MOVE_MASK =  mask;
+            case WQ, BQ -> QUEEN_MOVE_MASK = mask;
+            case WK, BK -> KING_MOVE_MASK = mask;
+        }
     }
 }

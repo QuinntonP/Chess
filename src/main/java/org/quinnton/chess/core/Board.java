@@ -77,4 +77,26 @@ public class Board {
         return null; // empty square
     }
 
+
+    public long getAllWhitePieces() {
+        long mask = 0L;
+        Piece[] whites = { Piece.WK, Piece.WQ, Piece.WB, Piece.WR, Piece.WN, Piece.WP };
+        for (Piece p : whites) {
+            mask |= bitBoards[p.ordinal()];
+        }
+        return mask;
+    }
+
+
+    public long getAllBlackPieces() {
+        long mask = 0L;
+        Piece[] blacks = { Piece.BK, Piece.BQ, Piece.BB, Piece.BR, Piece.BN, Piece.BP };
+        for (Piece p : blacks) mask |= bitBoards[p.ordinal()];
+        return mask;
+    }
+
+
+    public long getAllPieces() {
+        return getAllWhitePieces() | getAllBlackPieces();
+    }
 }

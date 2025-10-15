@@ -9,18 +9,17 @@ import javafx.stage.Stage;
 import org.quinnton.chess.core.*;
 
 public class Main extends Application {
-    MoveList legalMoves;
 
     @Override
     public void start(Stage stage) {
         // setup
         Board board = new Board();
-        board.loadFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
+        board.loadFen("8/8/8/3pR3/3P4/8/8/8");
 
         Masks masks = new Masks();
 
         int canvasSize = 800;
-        BoardView view = new BoardView(board, canvasSize, Color.BEIGE, Color.TAN, Color.CORNFLOWERBLUE);
+        BoardView view = new BoardView(board, canvasSize, Color.BEIGE, Color.TAN, Color.CORNFLOWERBLUE.deriveColor(0, 1, 1, 0.6));
         Scene scene = new Scene(new Group(view.canvas), canvasSize, canvasSize);
         stage.setScene(scene);
         stage.setTitle("Chess");
@@ -37,16 +36,20 @@ public class Main extends Application {
 
         view.draw();
 
+
+
         new AnimationTimer() {
             long last = 0;
             @Override
             public void handle(long now) {
                 if (last == 0) { last = now; return; }
                 last = now;
+                view.setDebugBitboard(Masks.ROOK_MOVE_MASK);
                 view.draw();
             }
         }.start();
     }
+
 
     public static void main(String[] args) {
         launch(args);
