@@ -85,15 +85,37 @@ public final class MoveGen {
 
     private static MoveList genRooks(Board board, int curSquare, boolean isWhite, Masks masks){
         MoveList list = new MoveList();
-        long curSquareMask = 1L << curSquare;
-        int file = curSquare % 8;
+
+        long curSquareMask = 1L << curSquare;  // correct per A1=LSB layout
+
+        long own   = isWhite ? board.getAllWhitePieces() : board.getAllBlackPieces();
+        long enemy = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();
+
         int rank = curSquare / 8;
+        int file = curSquare % 8;
 
-        long R_MASK = ((Masks.RANKS[rank] | Masks.FILES[file]) & ~curSquareMask) & Masks.NOT_FILE_A & Masks.NOT_FILE_H;;
+        long attackMask = (Masks.RANKS[rank] | Masks.FILES[file]) & ~curSquareMask;
+        long boardMask = board.getAllPieces() &~ curSquareMask;
 
-        masks.setMoveMask(Piece.WR, R_MASK);
+        long blockerBitboard = attackMask & boardMask;
 
+        masks.setMoveMask(Piece.WR, blockerBitboard);
+
+        long targets = masks.getRookMoves(curSquare, blockerBitboard);
+
+        Piece mover = isWhite ? Piece.WR : Piece.BR;
+
+        targets &= ~own; // avoid landing on your own pieces (still ignores ray blockers)
+
+        while (targets != 0) {
+            int to = Long.numberOfTrailingZeros(targets);
+            targets &= targets - 1;
+
+            Piece captured = ((enemy >>> to) & 1L) != 0 ? board.getPieceAtSquare(to) : null;
+            list.add(new Move(curSquare, to, mover, captured, null, 0));
+        }
         return list;
     }
+
 
 }

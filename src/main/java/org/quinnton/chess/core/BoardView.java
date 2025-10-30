@@ -53,8 +53,8 @@ public class BoardView {
                 drawPiece(x, y);
             }
         }
-
-        drawBitboardOverlay();
+        // Debug
+         drawBitboardOverlay();
     }
 
     private void drawSquare(int x, int y) {

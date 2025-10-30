@@ -10,6 +10,7 @@ public class Masks {
     // precomputed masks such as FILE_A, NOT_A_FILE, RANK_2, etc.
     static HashMap<Integer, Long> knightMoves = new HashMap<>();
     static HashMap<Integer, Long> kingMoves = new HashMap<>();
+    static HashMap<PositionBitboard, Long> rookMoves = new HashMap<>();
 
     // Move Masks
     public static long QUEEN_MOVE_MASK = 0;
@@ -99,6 +100,8 @@ public class Masks {
     }
 
 
+
+
     private static void generateKnightMoves() {
         HashMap<Integer, Long> moves = new HashMap<Integer, Long>(64);
 
@@ -128,10 +131,17 @@ public class Masks {
     public static void onload(){
         generateKnightMoves();
         generateKingMoves();
+        rookMoves = RookMoveMasks.generateRookLookupTable();
     }
+
 
     public long getKingMoves(int sq) {
         return this.kingMoves.get(sq);
+    }
+
+
+    public long getRookMoves(int sq, long blockerBitboard) {
+        return this.rookMoves.get(new PositionBitboard(sq, blockerBitboard));
     }
 
 
@@ -144,5 +154,14 @@ public class Masks {
             case WQ, BQ -> QUEEN_MOVE_MASK = mask;
             case WK, BK -> KING_MOVE_MASK = mask;
         }
+    }
+
+
+    public static long getFile(int i){
+        return FILES[i];
+    }
+
+    public static long getRanks(int i){
+        return RANKS[i];
     }
 }
