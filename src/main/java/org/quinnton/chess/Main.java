@@ -14,7 +14,7 @@ public class Main extends Application {
     public void start(Stage stage) {
         // setup
         Board board = new Board();
-        board.loadFen("8/8/8/3pR3/3P4/8/8/8");
+        board.loadFen("rnbqkbnr/ppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
 
         Masks masks = new Masks();
 

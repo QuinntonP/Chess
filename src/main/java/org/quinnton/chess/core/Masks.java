@@ -11,6 +11,8 @@ public class Masks {
     static HashMap<Integer, Long> knightMoves = new HashMap<>();
     static HashMap<Integer, Long> kingMoves = new HashMap<>();
     static HashMap<PositionBitboard, Long> rookMoves = new HashMap<>();
+    static HashMap<PositionBitboard, Long> bishopMoves = new HashMap<>();
+    static HashMap<Integer, Long> diagonalMaskTable = new HashMap<>();
 
     // Move Masks
     public static long QUEEN_MOVE_MASK = 0;
@@ -54,6 +56,42 @@ public class Masks {
     public static final long EDGES = FILE_A | FILE_H | RANK_1 | RANK_8;
 
 
+    // generate diagonal masks
+    private static final HashMap<Integer, Long> generateDiagonalMasks() {
+        HashMap<Integer, Long> table = new HashMap<>();
+
+        for (int sq = 0; sq < 64; sq++) {
+            int rank = sq / 8;
+            int file = sq % 8;
+
+            long mask = 0L;
+
+            int diag = rank - file;      // main diagonal (A1-H8)
+            int anti = rank + file;      // anti diagonal (A8-H1)
+
+            // iterate squares 0..63 (still one loop total!)
+            for (int sq2 = 0; sq2 < 64; sq2++) {
+                int r2 = sq2 / 8;
+                int f2 = sq2 % 8;
+
+                // if square lies on same diagonal
+                if (r2 - f2 == diag || r2 + f2 == anti) {
+                    if (sq2 != sq) mask |= 1L << sq2;
+                }
+            }
+
+            table.put(sq, mask);
+        }
+
+        return table;
+    }
+
+
+    // get Diagonal mask in both directions based off of square
+    public static final long getDiagonalMasks(int sq){
+        return diagonalMaskTable.get(sq);
+    }
+
 
     // Pre generate tables
     private static final int[][] KNIGHT_DIRS = {
@@ -65,17 +103,6 @@ public class Masks {
             {-1, 0}, {-1, 1}, {0, 1}, {1, 1},
             {1, 0}, {1, -1}, {0, -1}, {-1, -1}
     };
-
-
-    public long getRookMoveMask(long blockerMask){
-
-        return 1L;
-    }
-
-
-    private void generateRookMoves(){
-
-    }
 
 
     private static void generateKingMoves() {
@@ -131,7 +158,9 @@ public class Masks {
     public static void onload(){
         generateKnightMoves();
         generateKingMoves();
+        diagonalMaskTable = generateDiagonalMasks();
         rookMoves = RookMoveMasks.generateRookLookupTable();
+        bishopMoves = BishopMoveMasks.generateBishopLookupTable();
     }
 
 
@@ -142,6 +171,10 @@ public class Masks {
 
     public long getRookMoves(int sq, long blockerBitboard) {
         return this.rookMoves.get(new PositionBitboard(sq, blockerBitboard));
+    }
+
+    public long getBishopMoves(int sq, long blockerBitboard) {
+        return this.bishopMoves.get(new PositionBitboard(sq, blockerBitboard));
     }
 
 

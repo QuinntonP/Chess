@@ -1,0 +1,24 @@
+Knight Movement - Done
+King Movement - Done
+Rook Movement - Done kinda ( magics are not done )
+Bishop Movement - Done kinda ( magics are  not done )
+Queen Movement - Done kinda ( moves are based off of rooks and bishops so obviously no magics )
+Pawn Movement
+Turns
+Checking
+Can't move a piece if it puts in check
+Checkmate
+
+
+
+Chess Bot :
+    Evaluate function
+    Min max algorithm
+    Make moves
+    Program in openings
+
+
+Improvements
+    Rook magics
+    Bishop magics
+    Queen magics using the two above.

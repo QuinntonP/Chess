@@ -1,6 +1,5 @@
 package org.quinnton.chess.core;
 
-import java.util.ArrayList;
 
 public final class MoveGen {
 
@@ -14,9 +13,9 @@ public final class MoveGen {
         list = switch (firstPiece) {
             case WP, BP -> genPawns(board, curSquare, firstPiece.white);
             case WN, BN -> genKnights(board, curSquare, firstPiece.white, masks);
-            case WB, BB -> genBishops(board, curSquare, firstPiece.white);
+            case WB, BB -> genBishops(board, curSquare, firstPiece.white, masks);
             case WR, BR -> genRooks(board, curSquare, firstPiece.white, masks);
-            case WQ, BQ -> genQueens(board, curSquare, firstPiece.white);
+            case WQ, BQ -> genQueens(board, curSquare, firstPiece.white, masks);
             case WK, BK -> genKings(board, curSquare, firstPiece.white, masks);
         };
 
@@ -71,42 +70,23 @@ public final class MoveGen {
         return list;
     }
 
-    private static MoveList genBishops(Board board, int curSquare, boolean isWhite){
+    private static MoveList genBishops(Board board, int curSquare, boolean isWhite, Masks masks){
         MoveList list = new MoveList();
-
-        return list;
-    }
-
-    private static MoveList genQueens(Board board, int curSquare, boolean isWhite){
-        MoveList list = new MoveList();
-
-        return list;
-    }
-
-    private static MoveList genRooks(Board board, int curSquare, boolean isWhite, Masks masks){
-        MoveList list = new MoveList();
-
-        long curSquareMask = 1L << curSquare;  // correct per A1=LSB layout
 
         long own   = isWhite ? board.getAllWhitePieces() : board.getAllBlackPieces();
         long enemy = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();
 
-        int rank = curSquare / 8;
-        int file = curSquare % 8;
+        long occupied = board.getAllPieces();
 
-        long attackMask = (Masks.RANKS[rank] | Masks.FILES[file]) & ~curSquareMask;
-        long boardMask = board.getAllPieces() &~ curSquareMask;
+        long mask   = BishopMoveMasks.bishopBlockerMask(curSquare);
+        long subset = occupied & mask;  // relevant blockers only
 
-        long blockerBitboard = attackMask & boardMask;
+        long targets = masks.getBishopMoves(curSquare, subset);
 
-        masks.setMoveMask(Piece.WR, blockerBitboard);
-
-        long targets = masks.getRookMoves(curSquare, blockerBitboard);
+        // Remove own pieces
+        targets &= ~own;
 
         Piece mover = isWhite ? Piece.WR : Piece.BR;
-
-        targets &= ~own; // avoid landing on your own pieces (still ignores ray blockers)
-
         while (targets != 0) {
             int to = Long.numberOfTrailingZeros(targets);
             targets &= targets - 1;
@@ -116,6 +96,68 @@ public final class MoveGen {
         }
         return list;
     }
+
+    private static MoveList genQueens(Board board, int curSquare, boolean isWhite, Masks masks){
+        MoveList list = new MoveList();
+
+        long own   = isWhite ? board.getAllWhitePieces() : board.getAllBlackPieces();
+        long enemy = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();
+
+        long occupied = board.getAllPieces();
+
+        long bishopMask   = BishopMoveMasks.bishopBlockerMask(curSquare);
+        long rookMask     = RookMoveMasks.rookBlockerMask(curSquare);
+
+        long bishopSubset = occupied & bishopMask;  // relevant blockers only
+        long rookSusbet = occupied & rookMask;
+
+        long bishopTargets = masks.getBishopMoves(curSquare, bishopSubset);
+        long rookTargets = masks.getRookMoves(curSquare, rookSusbet);
+
+        long targets = bishopTargets | rookTargets;
+
+        // Remove own pieces
+        targets &= ~own;
+
+        Piece mover = isWhite ? Piece.WR : Piece.BR;
+        while (targets != 0) {
+            int to = Long.numberOfTrailingZeros(targets);
+            targets &= targets - 1;
+
+            Piece captured = ((enemy >>> to) & 1L) != 0 ? board.getPieceAtSquare(to) : null;
+            list.add(new Move(curSquare, to, mover, captured, null, 0));
+        }
+        return list;
+    }
+
+    private static MoveList genRooks(Board board, int curSquare, boolean isWhite, Masks masks) {
+        MoveList list = new MoveList();
+
+        long own   = isWhite ? board.getAllWhitePieces() : board.getAllBlackPieces();
+        long enemy = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();
+
+        long occupied = board.getAllPieces();
+
+        long mask   = RookMoveMasks.rookBlockerMask(curSquare);
+        long subset = occupied & mask;  // relevant blockers only
+
+        long targets = masks.getRookMoves(curSquare, subset);
+
+        // Remove own pieces
+        targets &= ~own;
+
+        Piece mover = isWhite ? Piece.WR : Piece.BR;
+        while (targets != 0) {
+            int to = Long.numberOfTrailingZeros(targets);
+            targets &= targets - 1;
+
+            Piece captured = ((enemy >>> to) & 1L) != 0 ? board.getPieceAtSquare(to) : null;
+            list.add(new Move(curSquare, to, mover, captured, null, 0));
+        }
+        return list;
+    }
+
+
 
 
 }

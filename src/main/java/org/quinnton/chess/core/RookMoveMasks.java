@@ -18,8 +18,9 @@ public class RookMoveMasks {
 
             long curSquareMask = 1L << sq;  // correct per A1=LSB layout
             long mask = (Masks.RANKS[rank] | Masks.FILES[file]) & ~curSquareMask;
+            mask &= rookBlockerMask(sq);
 
-            Long[] curBlockerMasks  = generateAllBlockerBitboards(mask);
+            Long[] curBlockerMasks  = Utils.generateAllBlockerBitboards(mask);
 
             for(int i = 0; i < curBlockerMasks.length; i++){
                 long legalMoves = getLegalMoves(sq, curBlockerMasks[i]);
@@ -29,35 +30,12 @@ public class RookMoveMasks {
 
         }
 
-
+        System.out.println("Rook table size: " + table.size());
         return table;
     }
 
-    public static Long[] generateAllBlockerBitboards(long mask) {
-        List<Integer> moveSquareIndices = new ArrayList<>();
 
-        for (int i = 0; i < 64; i++) {
-            if (((mask >> i) & 1L) == 1L) {
-                moveSquareIndices.add(i);
-            }
-        }
-
-        int numPatterns = 1 << moveSquareIndices.size();
-        Long[] blockerBitboards = new Long[numPatterns];
-        Arrays.setAll(blockerBitboards, i -> 0L);
-
-        for (int patternIndex = 0; patternIndex < numPatterns; patternIndex++) {
-            for (int bitIndex = 0; bitIndex < moveSquareIndices.size(); bitIndex++) {
-                int bit = (patternIndex >> bitIndex) & 1;
-                if (bit == 1) {
-                    blockerBitboards[patternIndex] |= (1L << moveSquareIndices.get(bitIndex));
-                }
-            }
-        }
-        return blockerBitboards;
-    }
-
-    private static long getLegalMoves(int startSquare, long bitboard) {
+    public static long getLegalMoves(int startSquare, long bitboard) {
         long moves = 0L;
         int rank = startSquare / 8;
         int file = startSquare % 8;
@@ -92,6 +70,24 @@ public class RookMoveMasks {
 
         return moves;
     }
+
+    public static long rookBlockerMask(int sq) {
+        int r = sq / 8, f = sq % 8;
+        long m = 0L;
+
+        // north (stop before rank 7)
+        for (int rr = r + 1; rr <= 6; rr++) m |= 1L << (rr * 8 + f);
+        // south (stop after rank 0)
+        for (int rr = r - 1; rr >= 1; rr--) m |= 1L << (rr * 8 + f);
+        // east (stop before file 7)
+        for (int ff = f + 1; ff <= 6; ff++) m |= 1L << (r * 8 + ff);
+        // west (stop after file 0)
+        for (int ff = f - 1; ff >= 1; ff--) m |= 1L << (r * 8 + ff);
+
+        return m;
+    }
+
+
 
 
 }

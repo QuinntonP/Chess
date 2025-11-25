@@ -54,7 +54,7 @@ public class BoardView {
             }
         }
         // Debug
-         drawBitboardOverlay();
+        // drawBitboardOverlay();
     }
 
     private void drawSquare(int x, int y) {
