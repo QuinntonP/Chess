@@ -68,8 +68,25 @@ public class Board {
         else{
             lastBlackMove = move;
         }
+
+        playMoveSound(move);
     }
 
+    private void playMoveSound(Move move){
+        if (move.promo != null){
+            SoundsPlayer.playPromoteSound();
+        } else if (move.capture != null) {
+            SoundsPlayer.playCaptureSound();
+            // temp for if a castle flag was 2
+        } else if (move.flags == 2) {
+            SoundsPlayer.playCastleSound();
+        } else if (move.flags == 1) {
+            // temp for if a check flag was 1
+            SoundsPlayer.playMoveCheckSound();
+        } else {
+            SoundsPlayer.playMoveSelfSound();
+        }
+    }
 
     public Move getLastMove(){
         return lastMove;

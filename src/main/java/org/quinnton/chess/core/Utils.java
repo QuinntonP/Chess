@@ -66,5 +66,4 @@ public class Utils {
 
         return blockerBitboards;
     }
-
 }

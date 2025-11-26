@@ -113,11 +113,6 @@ public final class MoveGen {
 
         Move myPreviousMove = isWhite ? board.getLastWhiteMove() : board.getLastBlackMove();
 
-        if(myPreviousMove != null){
-            System.out.println(myPreviousMove.to);
-        }
-
-
         if (((isWhite && rank == 4) || (!isWhite && rank == 3)) && myPreviousMove.to == curSquare){
             // right
             mask = 1L << curSquare + 1;
