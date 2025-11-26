@@ -3,7 +3,8 @@ King Movement - Done
 Rook Movement - Done kinda ( magics are not done )
 Bishop Movement - Done kinda ( magics are  not done )
 Queen Movement - Done kinda ( moves are based off of rooks and bishops so obviously no magics )
-Pawn Movement
+Pawn Movement - Done
+Castling
 Turns
 Checking
 Can't move a piece if it puts in check

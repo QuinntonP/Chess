@@ -42,6 +42,12 @@ public class SelectionController {
 
         if (isLegalDestination(sq)) {
             board.makeMove(selectedFrom, sq);
+
+            for (Move move : legalMoves){
+                if (move.to == sq && selectedFrom == move.from){
+                    board.setLastMove(move);
+                }
+            }
         }
 
         clearSelection();

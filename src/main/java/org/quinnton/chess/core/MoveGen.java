@@ -65,7 +65,81 @@ public final class MoveGen {
 
 
     private static MoveList genPawns(Board board, int curSquare, boolean isWhite){
+        int rank = curSquare / 8;
+
         MoveList list = new MoveList();
+
+        long mask;
+
+        long own   = isWhite ? board.getAllWhitePieces() : board.getAllBlackPieces();
+        long enemy = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();
+
+        long occupied = board.getAllPieces();
+        long targets = 0L;
+
+        Piece mover = isWhite ? Piece.WP : Piece.BP;
+
+        int direction = 1;
+
+        if(!isWhite){
+            direction = -1;
+        }
+
+        // move 1 forward
+        mask = 1L << (8 * direction + curSquare);
+        if ((mask & occupied) == 0){
+            targets |= mask;
+
+            //  move forward 2
+            mask = 1L << (16 * direction + curSquare);
+            if ((mask & occupied) == 0 && (rank == 1 || rank == 6)){
+                targets |= mask;
+            }
+        }
+
+        // left capture
+        mask = 1L << (7 * direction + curSquare);
+        if ((mask & enemy) != 0){
+            targets |= mask;
+        }
+        // right capture
+        mask = 1L << (9 * direction + curSquare);
+        if ((mask & enemy) != 0){
+            targets |= mask;
+        }
+
+        // dang enpassant
+        long enemyPawns = enemy & board.getAllPawns();
+
+        Move myPreviousMove = isWhite ? board.getLastWhiteMove() : board.getLastBlackMove();
+
+        if(myPreviousMove != null){
+            System.out.println(myPreviousMove.to);
+        }
+
+
+        if (((isWhite && rank == 4) || (!isWhite && rank == 3)) && myPreviousMove.to == curSquare){
+            // right
+            mask = 1L << curSquare + 1;
+            if ((enemyPawns & mask) != 0){
+                targets |= mask;
+            }
+
+            // left
+            mask = 1L << curSquare -1;
+            if ((enemyPawns & mask) != 0){
+                targets |= mask;
+            }
+
+        }
+
+        while (targets != 0) {
+            int to = Long.numberOfTrailingZeros(targets);
+            targets &= targets - 1;
+
+            Piece captured = ((enemy >>> to) & 1L) != 0 ? board.getPieceAtSquare(to) : null;
+            list.add(new Move(curSquare, to, mover, captured, null, 0));
+        }
 
         return list;
     }

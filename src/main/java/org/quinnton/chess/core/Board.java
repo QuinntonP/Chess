@@ -4,6 +4,10 @@ public class Board {
     private boolean whiteToMove = true;
     protected long[] bitBoards = new long[Piece.values().length];
 
+    Move lastMove;
+    Move lastWhiteMove;
+    Move lastBlackMove;
+
     public void loadFen(String fen) {
         // Clear any previous position
         for (int i = 0; i < bitBoards.length; i++) bitBoards[i] = 0L;
@@ -55,6 +59,30 @@ public class Board {
     }
 
 
+    public void setLastMove(Move move){
+        lastMove = move;
+
+        if (move.piece.isWhite()){
+            lastWhiteMove = move;
+        }
+        else{
+            lastBlackMove = move;
+        }
+    }
+
+
+    public Move getLastMove(){
+        return lastMove;
+    }
+
+    public Move getLastWhiteMove(){
+        return lastWhiteMove;
+    }
+
+    public Move getLastBlackMove(){
+        return lastBlackMove;
+    }
+
     public void setBitboardBit(Piece piece, int square, boolean set) {
         long mask = 1L << square;
         if (set) {
@@ -98,5 +126,10 @@ public class Board {
 
     public long getAllPieces() {
         return getAllWhitePieces() | getAllBlackPieces();
+    }
+
+
+    public long getAllPawns() {
+        return bitBoards[Piece.WP.ordinal()] | bitBoards[Piece.BP.ordinal()];
     }
 }
