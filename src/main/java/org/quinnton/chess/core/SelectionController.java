@@ -13,7 +13,6 @@ public class SelectionController {
     private MoveList legalMoves = null;
 
 
-
     public SelectionController(Board board, BoardView view, Masks masks) {
         this.board = board;
         this.view = view;
@@ -22,6 +21,13 @@ public class SelectionController {
 
     public void onSquareClick(int sq) {
         Piece clicked = board.getPieceAtSquare(sq);
+
+        // Only click if it is that pieces turn
+        if (selectedFrom == null && clicked != null && clicked.white != board.getTurnCounter()){
+            selectedFrom = null;
+            clearSelection();
+            return;
+        }
 
         if (selectedFrom == null) {
             if (clicked == null) return;
@@ -42,7 +48,7 @@ public class SelectionController {
 
         if (isLegalDestination(sq)) {
             board.makeMove(selectedFrom, sq);
-
+            board.addTurnCounter();
             for (Move move : legalMoves){
                 if (move.to == sq && selectedFrom == move.from){
                     board.setLastMove(move);

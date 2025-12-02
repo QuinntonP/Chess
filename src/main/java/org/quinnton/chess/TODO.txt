@@ -5,7 +5,8 @@ Bishop Movement - Done kinda ( magics are  not done )
 Queen Movement - Done kinda ( moves are based off of rooks and bishops so obviously no magics )
 Pawn Movement - Done
 Castling
-Turns
+Move generation testing
+Turns - Done
 Checking
 Can't move a piece if it puts in check
 Checkmate
@@ -23,3 +24,5 @@ Improvements
     Rook magics
     Bishop magics
     Queen magics using the two above.
+    Sounds - Done
+    Piece Dragging

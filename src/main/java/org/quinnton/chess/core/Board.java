@@ -1,8 +1,8 @@
 package org.quinnton.chess.core;
 
 public class Board {
-    private boolean whiteToMove = true;
     protected long[] bitBoards = new long[Piece.values().length];
+    private int turnCounter = 0;
 
     Move lastMove;
     Move lastWhiteMove;
@@ -148,5 +148,21 @@ public class Board {
 
     public long getAllPawns() {
         return bitBoards[Piece.WP.ordinal()] | bitBoards[Piece.BP.ordinal()];
+    }
+
+
+    /**
+     *
+     * @return True if it is whites turns and False if it is blacks turn
+     */
+    public boolean getTurnCounter() {
+        if (turnCounter % 2 == 0){
+            return true;
+        }
+        return false;
+    }
+
+    public void addTurnCounter() {
+        this.turnCounter++;
     }
 }
