@@ -4,6 +4,14 @@ public class Board {
     protected long[] bitBoards = new long[Piece.values().length];
     private int turnCounter = 0;
 
+    // castling
+    boolean whiteKingHasMoved = false;
+    boolean blackKingHasMoved = false;
+    boolean whiteKingRookHasMoved = false;
+    boolean whiteQueenRookHasMoved = false;
+    boolean blackKingRookHasMoved = false;
+    boolean blackQueenRookHasMoved = false;
+
     Move lastMove;
     Move lastWhiteMove;
     Move lastBlackMove;
@@ -55,6 +63,33 @@ public class Board {
 
         if (toPiece != null){
             setBitboardBit(toPiece, to, false);
+        }
+
+        checkCastlingPieces(from);
+    }
+
+
+    private void checkCastlingPieces(int square){
+        switch (square){
+            case 0 :
+                whiteQueenRookHasMoved = true;
+                break;
+            case 7 :
+                whiteKingRookHasMoved = true;
+                break;
+            case 56 :
+                blackQueenRookHasMoved = true;
+                break;
+            case 63 :
+                blackKingRookHasMoved = true;
+                break;
+
+            case 4 :
+                whiteKingHasMoved = true;
+                break;
+            case 60 :
+                blackKingHasMoved = true;
+                break;
         }
     }
 
@@ -164,5 +199,9 @@ public class Board {
 
     public void addTurnCounter() {
         this.turnCounter++;
+    }
+
+    public boolean isSquareAttacked(int square, boolean byWhite) {
+        return false;
     }
 }
