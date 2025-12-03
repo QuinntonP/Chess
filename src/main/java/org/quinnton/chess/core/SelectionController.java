@@ -7,16 +7,13 @@ public class SelectionController {
     private final Board board;
     private final BoardView view;
 
-    private final Masks masks;
-
     private Integer selectedFrom = null;
     private MoveList legalMoves = null;
 
 
-    public SelectionController(Board board, BoardView view, Masks masks) {
+    public SelectionController(Board board, BoardView view) {
         this.board = board;
         this.view = view;
-        this.masks = masks;
     }
 
     public void onSquareClick(int sq) {
@@ -32,7 +29,7 @@ public class SelectionController {
         if (selectedFrom == null) {
             if (clicked == null) return;
             selectedFrom = sq;
-            legalMoves = MoveGen.generate(board, selectedFrom, clicked, masks);
+            legalMoves = board.getPseudoLegalMoves().get(sq);
             showHighlights();
             return;
         }
@@ -41,7 +38,7 @@ public class SelectionController {
 
         if (clicked != null && fromPiece != null && clicked.white == fromPiece.white) {
             selectedFrom = sq;
-            legalMoves = MoveGen.generate(board, selectedFrom, clicked, masks);
+            legalMoves = board.getPseudoLegalMoves().get(sq);
             showHighlights();
             return;
         }

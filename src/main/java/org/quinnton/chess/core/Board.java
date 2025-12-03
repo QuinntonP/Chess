@@ -1,8 +1,19 @@
 package org.quinnton.chess.core;
 
+import java.util.HashMap;
+
 public class Board {
+    private final Masks masks;
+
+    public Board(Masks masks) {
+        this.masks = masks;
+    }
+
+    HashMap<Integer, MoveList> pseudoLegalMoves;
+
     protected long[] bitBoards = new long[Piece.values().length];
     private int turnCounter = 0;
+
 
     // castling
     boolean whiteKingHasMoved = false;
@@ -15,6 +26,8 @@ public class Board {
     Move lastMove;
     Move lastWhiteMove;
     Move lastBlackMove;
+
+
 
     public void loadFen(String fen) {
         // Clear any previous position
@@ -51,6 +64,9 @@ public class Board {
             setBitboardBit(piece, idx, true);
             file++;
         }
+
+        // initialize first moves
+        pseudoLegalMoves = MoveGen.generatePseudoLegalMoves(this, masks);
     }
 
 
@@ -197,11 +213,19 @@ public class Board {
         return false;
     }
 
+
     public void addTurnCounter() {
         this.turnCounter++;
+        pseudoLegalMoves = MoveGen.generatePseudoLegalMoves(this, masks);
     }
+
 
     public boolean isSquareAttacked(int square, boolean byWhite) {
         return false;
+    }
+
+
+    public HashMap<Integer, MoveList> getPseudoLegalMoves(){
+        return this.pseudoLegalMoves;
     }
 }

@@ -12,11 +12,11 @@ public class Main extends Application {
 
     @Override
     public void start(Stage stage) {
-        // setup
-        Board board = new Board();
-        board.loadFen("rnbqkbnr/ppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
-
         Masks masks = new Masks();
+
+        // setup
+        Board board = new Board(masks);
+        board.loadFen("rnbqkbnr/ppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
 
         int canvasSize = 800;
         BoardView view = new BoardView(board, canvasSize, Color.BEIGE, Color.TAN, Color.CORNFLOWERBLUE.deriveColor(0, 1, 1, 0.6));
@@ -26,7 +26,7 @@ public class Main extends Application {
         stage.show();
 
         // clicking logic
-        SelectionController controller = new SelectionController(board, view, masks);
+        SelectionController controller = new SelectionController(board, view);
 
         view.canvas.setOnMouseClicked(e -> {
             int sq = Utils.intFromCoordinates(e.getX(), e.getY(), view.getSquareSize());

@@ -2,6 +2,7 @@ package org.quinnton.chess.core;
 
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 public final class MoveGen {
@@ -342,5 +343,21 @@ public final class MoveGen {
             list.add(new Move(curSquare, to, mover, captured, null, 0));
         }
         return list;
+    }
+
+    public static HashMap<Integer, MoveList> generatePseudoLegalMoves(Board board, Masks masks){
+        HashMap<Integer, MoveList> allMoves = new HashMap<>();
+
+        for (int sq = 0; sq < 63; sq++){
+            Piece curPiece = board.getPieceAtSquare(sq);
+
+            if (curPiece == null) {continue;}
+
+            MoveList curMoves = generate(board, sq, curPiece, masks);
+
+            allMoves.put(sq, curMoves);
+        }
+
+        return allMoves;
     }
 }
