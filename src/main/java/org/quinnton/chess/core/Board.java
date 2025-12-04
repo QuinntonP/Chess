@@ -1,5 +1,6 @@
 package org.quinnton.chess.core;
 
+import java.util.Arrays;
 import java.util.HashMap;
 
 public class Board {
@@ -31,7 +32,7 @@ public class Board {
 
     public void loadFen(String fen) {
         // Clear any previous position
-        for (int i = 0; i < bitBoards.length; i++) bitBoards[i] = 0L;
+        Arrays.fill(bitBoards, 0L);
 
         String placement = fen.trim().split("\\s+")[0];
 
@@ -66,22 +67,57 @@ public class Board {
         }
 
         // initialize first moves
-        pseudoLegalMoves = MoveGen.generatePseudoLegalMoves(this, masks);
+        pseudoLegalMoves = MoveGen.generatePseudoLegalMoves(this, masks, true);
     }
 
 
-    public void makeMove(int from, int to){
-        Piece piece = getPieceAtSquare(from);
-        Piece toPiece = getPieceAtSquare(to);
+    public void makeMove(Move move){
+        Piece piece = move.piece;
+        Piece toPiece = move.capture;
 
-        setBitboardBit(piece, from, false);
-        setBitboardBit(piece, to, true);
+        setBitboardBit(piece, move.from, false);
+        setBitboardBit(piece, move.to, true);
 
         if (toPiece != null){
-            setBitboardBit(toPiece, to, false);
+            setBitboardBit(toPiece, move.to, false);
         }
 
-        checkCastlingPieces(from);
+        // castling stuff
+        if (move.flags == 2 || move.flags == 3){
+            castleRooks(move);
+        }
+
+        checkCastlingPieces(move.from);
+    }
+
+
+    private void castleRooks(Move  move){
+        Move rookMove = null;
+
+        if (move.piece.isWhite()){
+            // White Queen side rook
+            if (move.flags == 2){
+                rookMove = new Move(0, 3, Piece.WR, null, null, 0);
+            }
+            // White King side rook
+            if (move.flags == 3){
+                rookMove = new Move(7, 5, Piece.WR, null, null, 0);
+            }
+        }
+        else{
+            if (move.flags == 2){
+                // Black Queen side rook
+                rookMove = new Move(56, 59, Piece.BR, null, null, 0);
+            }
+            if (move.flags == 3){
+                // Black King side rook
+                rookMove = new Move(63, 61, Piece.BR, null, null, 0);
+            }
+        }
+
+        if (rookMove != null){
+            makeMove(rookMove);
+        }
     }
 
 
@@ -216,16 +252,34 @@ public class Board {
 
     public void addTurnCounter() {
         this.turnCounter++;
-        pseudoLegalMoves = MoveGen.generatePseudoLegalMoves(this, masks);
-    }
-
-
-    public boolean isSquareAttacked(int square, boolean byWhite) {
-        return false;
+        pseudoLegalMoves = MoveGen.generatePseudoLegalMoves(this, masks, true);
     }
 
 
     public HashMap<Integer, MoveList> getPseudoLegalMoves(){
         return this.pseudoLegalMoves;
     }
+
+
+    public long getAttackMask(boolean byWhite) {
+        long mask = 0L;
+
+        // All pieces for the side whose attacks we want
+        long bb = byWhite ? getAllWhitePieces() : getAllBlackPieces();
+
+        HashMap<Integer, MoveList> allMoves = MoveGen.generatePseudoLegalMoves(this, masks, bb, false);
+
+        // **** this is all move to's currently it needs to filter by if they are attacks for things like pawn pushes -> castling -> etc.
+        for (MoveList moveList : allMoves.values()) {
+            for (Move move : moveList) {
+                int to = move.to;
+                if (move.flags == 0){
+                    mask |= 1L << to; // set the 'to' square as attacked
+                }
+            }
+        }
+
+        return mask;
+    }
+
 }

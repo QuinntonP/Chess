@@ -16,6 +16,7 @@ public class SelectionController {
         this.view = view;
     }
 
+
     public void onSquareClick(int sq) {
         Piece clicked = board.getPieceAtSquare(sq);
 
@@ -43,18 +44,17 @@ public class SelectionController {
             return;
         }
 
-        if (isLegalDestination(sq)) {
-            board.makeMove(selectedFrom, sq);
+        Move move = getMoveFromMoves(legalMoves, fromPiece, sq);
+
+        if (move != null) {
+            board.makeMove(move);
             board.addTurnCounter();
-            for (Move move : legalMoves){
-                if (move.to == sq && selectedFrom == move.from){
-                    board.setLastMove(move);
-                }
-            }
+            board.setLastMove(move);
         }
 
         clearSelection();
     }
+
 
     private void showHighlights() {
         Set<Integer> squares = new HashSet<>();
@@ -63,14 +63,26 @@ public class SelectionController {
         view.setHighlights(squares);
     }
 
-    private boolean isLegalDestination(int sq) {
-        for (Move legalMove : legalMoves) if (legalMove.to == sq) return true;
-        return false;
-    }
 
     private void clearSelection() {
         selectedFrom = null;
         legalMoves = null;
         view.clearHighlights();
+    }
+
+    /**
+     *
+     * @param moveList the list of moves
+     * @param piece the pice type
+     * @param dest the destination square of the move
+     * @return the move that fits the all the criteria
+     */
+    private Move getMoveFromMoves(MoveList moveList, Piece piece, int dest){
+        for (Move move : moveList){
+            if (move.to == dest && move.piece == piece){
+                return move;
+            }
+        }
+        return null;
     }
 }
