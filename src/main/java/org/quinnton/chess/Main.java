@@ -16,7 +16,7 @@ public class Main extends Application {
 
         // setup
         Board board = new Board(masks);
-        board.loadFen("rnbqkbnr/ppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
+        board.loadFen("r3k2r/8/8/8/8/8/8/R3K2R");
 
         int canvasSize = 800;
         BoardView view = new BoardView(board, canvasSize, Color.BEIGE, Color.TAN, Color.CORNFLOWERBLUE.deriveColor(0, 1, 1, 0.6));
