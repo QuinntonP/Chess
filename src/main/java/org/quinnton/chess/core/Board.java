@@ -165,7 +165,7 @@ public class Board {
         } else if (move.capture != null) {
             SoundsPlayer.playCaptureSound();
             // temp for if a castle flag was 2
-        } else if (move.flags == 2) {
+        } else if (move.flags == 2 || move.flags == 3) {
             SoundsPlayer.playCastleSound();
         } else if (move.flags == 1) {
             // temp for if a check flag was 1

@@ -9,10 +9,10 @@ Get attacking mask - Done
 Move Flags - Done
 Castling - Done
 Checking
-Move generation testing
-Turns - Done
 Can't move a piece if it puts in check
 Checkmate
+Move generation testing
+Turns - Done
 
 
 
