@@ -19,7 +19,7 @@ public class Main extends Application {
         board.loadFen("r3k2r/8/8/8/8/8/8/R3K2R");
 
         int canvasSize = 800;
-        BoardView view = new BoardView(board, canvasSize, Color.BEIGE, Color.TAN, Color.CORNFLOWERBLUE.deriveColor(0, 1, 1, 0.6));
+        BoardView view = new BoardView(board, canvasSize, Color.BEIGE, Color.TAN, Color.CORNFLOWERBLUE.deriveColor(0, 1, 1, 0.6), Color.RED.deriveColor(0, 1, 1, 0.6));
         Scene scene = new Scene(new Group(view.canvas), canvasSize, canvasSize);
         stage.setScene(scene);
         stage.setTitle("Chess");

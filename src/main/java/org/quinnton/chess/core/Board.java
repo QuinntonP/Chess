@@ -10,7 +10,7 @@ public class Board {
         this.masks = masks;
     }
 
-    HashMap<Integer, MoveList> pseudoLegalMoves;
+    HashMap<Integer, MoveList> legalMoves;
 
     protected long[] bitBoards = new long[Piece.values().length];
     private int turnCounter = 0;
@@ -23,6 +23,19 @@ public class Board {
     boolean whiteQueenRookHasMoved = false;
     boolean blackKingRookHasMoved = false;
     boolean blackQueenRookHasMoved = false;
+
+
+    // checks
+    boolean whiteInCheck;
+    boolean blackInCheck;
+
+    // --- game state flags ---
+    boolean gameOver = false;
+    boolean stalemate = false;
+    Boolean winnerIsWhite = null; // null = no winner yet / draw
+
+    int whiteKingSquare;
+    int blackKingSquare;
 
     Move lastMove;
     Move lastWhiteMove;
@@ -67,7 +80,10 @@ public class Board {
         }
 
         // initialize first moves
-        pseudoLegalMoves = MoveGen.generatePseudoLegalMoves(this, masks, true);
+        legalMoves = MoveGen.generateLegalMoves(this, masks);
+
+        // look for initial checks
+        lookForChecks();
     }
 
 
@@ -86,8 +102,11 @@ public class Board {
         if (move.flags == 2 || move.flags == 3){
             castleRooks(move);
         }
-
         checkCastlingPieces(move.from);
+
+        // checks
+        lookForChecks();
+        updateKingSquares();
     }
 
 
@@ -164,12 +183,8 @@ public class Board {
             SoundsPlayer.playPromoteSound();
         } else if (move.capture != null) {
             SoundsPlayer.playCaptureSound();
-            // temp for if a castle flag was 2
         } else if (move.flags == 2 || move.flags == 3) {
             SoundsPlayer.playCastleSound();
-        } else if (move.flags == 1) {
-            // temp for if a check flag was 1
-            SoundsPlayer.playMoveCheckSound();
         } else {
             SoundsPlayer.playMoveSelfSound();
         }
@@ -252,12 +267,12 @@ public class Board {
 
     public void addTurnCounter() {
         this.turnCounter++;
-        pseudoLegalMoves = MoveGen.generatePseudoLegalMoves(this, masks, true);
+        legalMoves = MoveGen.generateLegalMoves(this, masks);
     }
 
 
-    public HashMap<Integer, MoveList> getPseudoLegalMoves(){
-        return this.pseudoLegalMoves;
+    public HashMap<Integer, MoveList> getLegalMoves(){
+        return this.legalMoves;
     }
 
 
@@ -281,5 +296,161 @@ public class Board {
 
         return mask;
     }
+
+
+    private void lookForChecks() {
+        // Squares attacked by the side who just moved
+        long whiteAttackMask = getAttackMask(true);
+        long blackAttackmask = getAttackMask(false);
+
+        long whiteKingMask =  bitBoards[Piece.WK.ordinal()];
+        long blackKingMask = bitBoards[Piece.BK.ordinal()];
+
+        // Check for white being in check
+        if ((whiteKingMask & blackAttackmask) != 0){
+            whiteInCheck = true;
+        }
+        else {
+            whiteInCheck = false;
+        }
+
+        // Check for black being in check
+        if ((blackKingMask & whiteAttackMask) != 0){
+            blackInCheck = true;
+        }
+        else{
+            blackInCheck = false;
+        }
+    }
+
+
+    public void lookForCheckmate() {
+        if (gameOver) return;
+
+        if (!whiteInCheck && !blackInCheck) return;
+
+        if (whiteInCheck){
+            if (legalMoves.get(whiteKingSquare).isEmpty()){
+                System.out.println("Checkmate Black wins");
+            }
+        }
+
+        if (blackInCheck){
+            if (legalMoves.get(blackKingSquare).isEmpty()){
+                System.out.println("Checkmate White wins");
+            }
+        }
+    }
+
+
+    private void  updateKingSquares(){
+        whiteKingSquare = Utils.extractSquares(bitBoards[Piece.WK.ordinal()]).getFirst();
+        blackKingSquare = Utils.extractSquares(bitBoards[Piece.BK.ordinal()]).getFirst();
+    }
+
+
+    /**
+     * Engine / move-gen version of makeMove:
+     * - moves pieces on bitboards
+     * - handles captures
+     * - handles castling rook move
+     * - updates check + king squares
+     * Does NOT:
+     * - update castling "has moved" booleans
+     * - update turnCounter or pseudoLegalMoves
+     * - set lastMove / play sounds
+     */
+    public void makeMoveInternal(Move move) {
+        Piece piece    = move.piece;
+        Piece captured = move.capture;
+
+        // 1. Move the main piece
+        setBitboardBit(piece, move.from, false);
+        setBitboardBit(piece, move.to, true);
+
+        // 2. Remove captured piece (if any)
+        if (captured != null) {
+            setBitboardBit(captured, move.to, false);
+        }
+
+        // 3. Handle castling rook move (flags 2 = queenside, 3 = kingside)
+        if (move.flags == 2 || move.flags == 3) {
+            if (piece.isWhite()) {
+                // White castling
+                if (move.flags == 2) {
+                    // White queenside: king e1->c1, rook a1->d1
+                    setBitboardBit(Piece.WR, 0, false);
+                    setBitboardBit(Piece.WR, 3, true);
+                } else {
+                    // White kingside: king e1->g1, rook h1->f1
+                    setBitboardBit(Piece.WR, 7, false);
+                    setBitboardBit(Piece.WR, 5, true);
+                }
+            } else {
+                // Black castling
+                if (move.flags == 2) {
+                    // Black queenside: king e8->c8, rook a8->d8
+                    setBitboardBit(Piece.BR, 56, false);
+                    setBitboardBit(Piece.BR, 59, true);
+                } else {
+                    // Black kingside: king e8->g8, rook h8->f8
+                    setBitboardBit(Piece.BR, 63, false);
+                    setBitboardBit(Piece.BR, 61, true);
+                }
+            }
+        }
+
+        // 4. Recompute checks + king squares in the new position
+        lookForChecks();
+        updateKingSquares();
+    }
+
+    /**
+     * Undo a move previously done with makeMoveInternal.
+     * Must exactly reverse the operations there.
+     */
+    public void unmakeMoveInternal(Move move) {
+        Piece piece    = move.piece;
+        Piece captured = move.capture;
+
+        // 1. If it was castling, move the rook back first
+        if (move.flags == 2 || move.flags == 3) {
+            if (piece.isWhite()) {
+                if (move.flags == 2) {
+                    // Undo white queenside: rook d1->a1
+                    setBitboardBit(Piece.WR, 3, false);
+                    setBitboardBit(Piece.WR, 0, true);
+                } else {
+                    // Undo white kingside: rook f1->h1
+                    setBitboardBit(Piece.WR, 5, false);
+                    setBitboardBit(Piece.WR, 7, true);
+                }
+            } else {
+                if (move.flags == 2) {
+                    // Undo black queenside: rook d8->a8
+                    setBitboardBit(Piece.BR, 59, false);
+                    setBitboardBit(Piece.BR, 56, true);
+                } else {
+                    // Undo black kingside: rook f8->h8
+                    setBitboardBit(Piece.BR, 61, false);
+                    setBitboardBit(Piece.BR, 63, true);
+                }
+            }
+        }
+
+        // 2. Move the piece back
+        setBitboardBit(piece, move.to, false);
+        setBitboardBit(piece, move.from, true);
+
+        // 3. Restore captured piece, if there was one
+        if (captured != null) {
+            setBitboardBit(captured, move.to, true);
+        }
+
+        // 4. Recompute checks + king squares for the restored position
+        lookForChecks();
+        updateKingSquares();
+    }
+
 
 }

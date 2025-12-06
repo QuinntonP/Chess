@@ -394,4 +394,47 @@ public final class MoveGen {
 
         return allMoves;
     }
+
+
+    public static HashMap<Integer, MoveList> generateLegalMoves(Board board, Masks masks){
+        HashMap<Integer, MoveList> pseudoLegalMoves = generatePseudoLegalMoves(board, masks, true);
+        HashMap<Integer, MoveList> legalMoves = new HashMap<>();
+
+        for (int sq = 0; sq < 64; sq++){
+            MoveList moveList = pseudoLegalMoves.get(sq);
+            MoveList tempMoveList = new MoveList();
+
+            if (moveList == null) { continue; }
+
+            for (Move move : moveList){
+
+                // do not allow moves that "capture" a king
+                if (move.capture == Piece.WK || move.capture == Piece.BK) {
+                    continue;
+                }
+
+                // 2) Test if the move leaves your own king in check
+                board.makeMoveInternal(move);
+
+                if (move.piece.isWhite()) {
+                    if (!board.whiteInCheck) {
+                        tempMoveList.add(move);
+                    }
+                }
+
+                if (move.piece.isBlack()) {
+                    if (!board.blackInCheck) {
+                        tempMoveList.add(move);
+                    }
+                }
+
+                board.unmakeMoveInternal(move);
+            }
+
+            legalMoves.put(sq, tempMoveList);
+        }
+
+        return legalMoves;
+    }
+
 }

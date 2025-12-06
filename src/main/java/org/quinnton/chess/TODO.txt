@@ -8,9 +8,9 @@ Generate all moves on each turn - Done
 Get attacking mask - Done
 Move Flags - Done
 Castling - Done
-Checking
-Can't move a piece if it puts in check
-Checkmate
+Checking - Done
+Can't move a piece if it puts in check - Done
+Checkmate - Done
 Move generation testing
 Turns - Done
 

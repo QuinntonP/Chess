@@ -30,7 +30,8 @@ public class SelectionController {
         if (selectedFrom == null) {
             if (clicked == null) return;
             selectedFrom = sq;
-            legalMoves = board.getPseudoLegalMoves().get(sq);
+            // this guy
+            legalMoves = board.getLegalMoves().get(sq);
             showHighlights();
             return;
         }
@@ -39,7 +40,8 @@ public class SelectionController {
 
         if (clicked != null && fromPiece != null && clicked.white == fromPiece.white) {
             selectedFrom = sq;
-            legalMoves = board.getPseudoLegalMoves().get(sq);
+            // and this guy
+            legalMoves = board.getLegalMoves().get(sq);
             showHighlights();
             return;
         }
@@ -50,6 +52,7 @@ public class SelectionController {
             board.makeMove(move);
             board.addTurnCounter();
             board.setLastMove(move);
+            board.lookForCheckmate();
         }
 
         clearSelection();

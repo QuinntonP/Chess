@@ -15,18 +15,20 @@ public class BoardView {
     private final Color color1;
     private final Color color2;
     private final Color color3;
+    private final Color checkColor;
     private final int sqSize;
     private final GraphicsContext gc;
     private Set<Integer> highlights = Set.of();
 
     private long debugBitboard;
 
-    public BoardView(Board board, int canvasSize, Color color1, Color color2, Color color3) {
+    public BoardView(Board board, int canvasSize, Color color1, Color color2, Color color3, Color checkColor) {
         this.board = board;
         this.canvas = new Canvas(canvasSize, canvasSize);
         this.color1 = color1;
         this.color2 = color2;
         this.color3 = color3;
+        this.checkColor = checkColor;
         this.sqSize = canvasSize / 8;
         this.gc = this.canvas.getGraphicsContext2D();
     }
@@ -58,9 +60,22 @@ public class BoardView {
 
     private void drawSquare(int x, int y) {
         int square = (7 - y) * 8 + x;
+        // draw board color
         gc.setFill(((x + y) % 2 == 0) ? color1 : color2);
         gc.fillRect(x * sqSize, y * sqSize, sqSize, sqSize);
 
+        // draw checks
+        if (board.whiteInCheck && board.whiteKingSquare == square){
+            gc.setFill(checkColor);
+            gc.fillRect(x * sqSize, y * sqSize, sqSize, sqSize);
+        }
+
+        if (board.blackInCheck && board.blackKingSquare == square){
+            gc.setFill(checkColor);
+            gc.fillRect(x * sqSize, y * sqSize, sqSize, sqSize);
+        }
+
+        // draw highlights
         if (highlights.contains(square)){
             gc.setFill(color3);
             gc.fillRect(x * sqSize, y * sqSize, sqSize, sqSize);
