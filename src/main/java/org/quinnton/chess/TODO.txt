@@ -11,8 +11,8 @@ Castling - Done
 Checking - Done
 Can't move a piece if it puts in check - Done
 Checkmate - Done
-Move generation testing
 Turns - Done
+Move generation testing
 
 
 

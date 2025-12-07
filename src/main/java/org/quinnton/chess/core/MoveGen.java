@@ -228,7 +228,7 @@ public final class MoveGen {
 
         Move myPreviousMove = isWhite ? board.getLastWhiteMove() : board.getLastBlackMove();
 
-        if (((isWhite && rank == 4) || (!isWhite && rank == 3)) && myPreviousMove.to == curSquare){
+        if (((isWhite && rank == 4) || (!isWhite && rank == 3)) && myPreviousMove != null && myPreviousMove.to == curSquare){
             // right
             mask = 1L << curSquare + 1;
             if ((enemyPawns & mask) != 0){
@@ -351,27 +351,31 @@ public final class MoveGen {
         return list;
     }
 
-    public static HashMap<Integer, MoveList> generatePseudoLegalMoves(Board board, Masks masks, boolean includeCastling){
+    public static HashMap<Integer, MoveList> generatePseudoLegalMoves(Board board, Masks masks, boolean includeCastling) {
         HashMap<Integer, MoveList> allMoves = new HashMap<>();
 
-        long bb = board.getAllPieces();
+        boolean whiteToMove = board.getTurnCounter();
+        long bb = whiteToMove ? board.getAllWhitePieces() : board.getAllBlackPieces();
 
         while (bb != 0) {
-            int sq = Long.numberOfTrailingZeros(bb);  // gets index of lowest 1-bit
+            int sq = Long.numberOfTrailingZeros(bb);
+            bb &= bb - 1;
 
             Piece curPiece = board.getPieceAtSquare(sq);
+            if (curPiece == null) continue;
 
-            if (curPiece == null) {continue;}
+            // Extra safety: make sure this piece matches side-to-move
+            if (curPiece.isWhite() != whiteToMove) continue;
 
             MoveList curMoves = generate(board, sq, curPiece, masks, includeCastling);
-
-            allMoves.put(sq, curMoves);
-
-            bb &= bb - 1;  // removes the lowest 1-bit
+            if (!curMoves.isEmpty()) {
+                allMoves.put(sq, curMoves);
+            }
         }
 
         return allMoves;
     }
+
 
     public static HashMap<Integer, MoveList> generatePseudoLegalMoves(Board board, Masks masks, Long bitboard, boolean includeCastling){
         HashMap<Integer, MoveList> allMoves = new HashMap<>();
@@ -396,45 +400,46 @@ public final class MoveGen {
     }
 
 
-    public static HashMap<Integer, MoveList> generateLegalMoves(Board board, Masks masks){
-        HashMap<Integer, MoveList> pseudoLegalMoves = generatePseudoLegalMoves(board, masks, true);
-        HashMap<Integer, MoveList> legalMoves = new HashMap<>();
+    public static HashMap<Integer, MoveList> generateLegalMoves(Board board, Masks masks) {
+        HashMap<Integer, MoveList> pseudo = generatePseudoLegalMoves(board, masks, true);
+        HashMap<Integer, MoveList> legal  = new HashMap<>();
 
-        for (int sq = 0; sq < 64; sq++){
-            MoveList moveList = pseudoLegalMoves.get(sq);
-            MoveList tempMoveList = new MoveList();
+        boolean whiteToMove = board.getTurnCounter();
 
-            if (moveList == null) { continue; }
+        for (var entry : pseudo.entrySet()) {
+            int fromSq = entry.getKey();
+            MoveList srcList = entry.getValue();
+            MoveList dstList = new MoveList();
 
-            for (Move move : moveList){
-
-                // do not allow moves that "capture" a king
+            for (Move move : srcList) {
+                // Never allow “capturing” a king
                 if (move.capture == Piece.WK || move.capture == Piece.BK) {
                     continue;
                 }
 
-                // 2) Test if the move leaves your own king in check
-                board.makeMoveInternal(move);
-
-                if (move.piece.isWhite()) {
-                    if (!board.whiteInCheck) {
-                        tempMoveList.add(move);
-                    }
+                // Sanity: should already be true, but keep it
+                if (move.piece.isWhite() != whiteToMove) {
+                    continue;
                 }
 
-                if (move.piece.isBlack()) {
-                    if (!board.blackInCheck) {
-                        tempMoveList.add(move);
-                    }
+                board.makeMoveInternal(move);
+
+                boolean kingSafe = whiteToMove ? !board.whiteInCheck : !board.blackInCheck;
+                if (kingSafe) {
+                    dstList.add(move);
                 }
 
                 board.unmakeMoveInternal(move);
             }
 
-            legalMoves.put(sq, tempMoveList);
+            if (!dstList.isEmpty()) {
+                legal.put(fromSq, dstList);
+            }
         }
 
-        return legalMoves;
+        return legal;
     }
+
+
 
 }

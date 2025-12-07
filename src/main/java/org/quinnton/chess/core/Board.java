@@ -452,5 +452,28 @@ public class Board {
         updateKingSquares();
     }
 
+    /**
+     *
+     * @param depth how deep the move test will go
+     * @return the numbers of successful moves
+     */
+    public int moveGenerationTest (int depth){
+        MoveList largeMoveList;
 
+        if (depth == 0){
+            return 1;
+        }
+
+        HashMap<Integer, MoveList> moveListHashMap = MoveGen.generateLegalMoves(this, masks);
+        int numPositions = 0;
+
+        for (MoveList moveList : moveListHashMap.values()){
+            for (Move move : moveList){
+                makeMoveInternal(move);
+                numPositions += moveGenerationTest(depth - 1);
+                unmakeMoveInternal(move);
+            }
+        }
+        return numPositions;
+    }
 }

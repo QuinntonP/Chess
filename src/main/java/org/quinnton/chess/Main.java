@@ -16,7 +16,7 @@ public class Main extends Application {
 
         // setup
         Board board = new Board(masks);
-        board.loadFen("r3k2r/8/8/8/8/8/8/R3K2R");
+        board.loadFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
 
         int canvasSize = 800;
         BoardView view = new BoardView(board, canvasSize, Color.BEIGE, Color.TAN, Color.CORNFLOWERBLUE.deriveColor(0, 1, 1, 0.6), Color.RED.deriveColor(0, 1, 1, 0.6));
@@ -24,6 +24,11 @@ public class Main extends Application {
         stage.setScene(scene);
         stage.setTitle("Chess");
         stage.show();
+
+        for (int i = 0; i < 4; i++){
+            System.out.println("move gen test for depth " + i + " : " + board.moveGenerationTest(i));
+        }
+
 
         // clicking logic
         SelectionController controller = new SelectionController(board, view);
