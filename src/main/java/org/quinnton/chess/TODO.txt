@@ -13,6 +13,7 @@ Can't move a piece if it puts in check - Done
 Checkmate - Done
 Turns - Done
 Move generation testing
+Promotions
 
 
 

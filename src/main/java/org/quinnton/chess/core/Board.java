@@ -403,6 +403,10 @@ public class Board {
         // 4. Recompute checks + king squares in the new position
         lookForChecks();
         updateKingSquares();
+
+
+        // 5. Flip side to move for engine / perft
+        turnCounter++;
     }
 
     /**
@@ -413,7 +417,10 @@ public class Board {
         Piece piece    = move.piece;
         Piece captured = move.capture;
 
-        // 1. If it was castling, move the rook back first
+        // 1. Flip side to move back
+        turnCounter--;
+
+        // 2. If it was castling, move the rook back first
         if (move.flags == 2 || move.flags == 3) {
             if (piece.isWhite()) {
                 if (move.flags == 2) {
@@ -438,42 +445,18 @@ public class Board {
             }
         }
 
-        // 2. Move the piece back
+        // 3. Move the piece back
         setBitboardBit(piece, move.to, false);
         setBitboardBit(piece, move.from, true);
 
-        // 3. Restore captured piece, if there was one
+        // 4. Restore captured piece, if there was one
         if (captured != null) {
             setBitboardBit(captured, move.to, true);
         }
 
-        // 4. Recompute checks + king squares for the restored position
+        // 5. Recompute checks + king squares for the restored position
         lookForChecks();
         updateKingSquares();
     }
 
-    /**
-     *
-     * @param depth how deep the move test will go
-     * @return the numbers of successful moves
-     */
-    public int moveGenerationTest (int depth){
-        MoveList largeMoveList;
-
-        if (depth == 0){
-            return 1;
-        }
-
-        HashMap<Integer, MoveList> moveListHashMap = MoveGen.generateLegalMoves(this, masks);
-        int numPositions = 0;
-
-        for (MoveList moveList : moveListHashMap.values()){
-            for (Move move : moveList){
-                makeMoveInternal(move);
-                numPositions += moveGenerationTest(depth - 1);
-                unmakeMoveInternal(move);
-            }
-        }
-        return numPositions;
-    }
 }

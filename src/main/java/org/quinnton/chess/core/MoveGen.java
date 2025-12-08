@@ -177,90 +177,60 @@ public final class MoveGen {
 
 
 
-    private static MoveList genPawns(Board board, int curSquare, boolean isWhite){
-        int rank = curSquare / 8;
-
+    private static MoveList genPawns(Board board, int curSquare, boolean isWhite) {
         MoveList list = new MoveList();
 
-        long mask;
-
-        long own   = isWhite ? board.getAllWhitePieces() : board.getAllBlackPieces();
-        long enemy = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();
+        int rank = curSquare / 8;
+        int file = curSquare % 8;
 
         long occupied = board.getAllPieces();
-        long attackTargets = 0L;
-        long movementTargets = 0L;
+        long enemy    = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();
+        Piece mover   = isWhite ? Piece.WP : Piece.BP;
+        int dir       = isWhite ? 1 : -1;
 
-        Piece mover = isWhite ? Piece.WP : Piece.BP;
+        // ---------- One step forward ----------
+        int fwd = curSquare + 8 * dir;
+        if (fwd >= 0 && fwd < 64 && ((occupied >>> fwd) & 1L) == 0) {
+            // (no promotion handling here yet – not needed for startpos perft 3)
+            list.add(new Move(curSquare, fwd, mover, null, null, 1));
 
-        int direction = 1;
-
-        if(!isWhite){
-            direction = -1;
-        }
-
-        // move 1 forward
-        mask = 1L << (8 * direction + curSquare);
-        if ((mask & occupied) == 0){
-            movementTargets |= mask;
-
-            //  move forward 2
-            mask = 1L << (16 * direction + curSquare);
-            if ((mask & occupied) == 0 && (rank == 1 || rank == 6)){
-                movementTargets |= mask;
+            // ---------- Two steps forward (only from starting rank) ----------
+            boolean onStartRank = (isWhite && rank == 1) || (!isWhite && rank == 6);
+            if (onStartRank) {
+                int fwd2 = curSquare + 16 * dir;
+                if (fwd2 >= 0 && fwd2 < 64 && ((occupied >>> fwd2) & 1L) == 0) {
+                    list.add(new Move(curSquare, fwd2, mover, null, null, 1));
+                }
             }
         }
 
-        // left capture
-        mask = 1L << (7 * direction + curSquare);
-        if ((mask & enemy) != 0){
-            attackTargets |= mask;
-        }
+        // ---------- Captures ----------
+        long enemyBB = enemy;
 
-        // right capture
-        mask = 1L << (9 * direction + curSquare);
-        if ((mask & enemy) != 0){
-            attackTargets |= mask;
-        }
-
-        // dang enpassant
-        long enemyPawns = enemy & board.getAllPawns();
-
-        Move myPreviousMove = isWhite ? board.getLastWhiteMove() : board.getLastBlackMove();
-
-        if (((isWhite && rank == 4) || (!isWhite && rank == 3)) && myPreviousMove != null && myPreviousMove.to == curSquare){
-            // right
-            mask = 1L << curSquare + 1;
-            if ((enemyPawns & mask) != 0){
-                attackTargets |= mask;
+        // capture to "left" (from pawn's perspective)
+        if (file > 0) {
+            int left = curSquare + 7 * dir;
+            if (left >= 0 && left < 64 && ((enemyBB >>> left) & 1L) != 0) {
+                Piece captured = board.getPieceAtSquare(left);
+                list.add(new Move(curSquare, left, mover, captured, null, 0));
             }
+        }
 
-            // left
-            mask = 1L << curSquare -1;
-            if ((enemyPawns & mask) != 0){
-                attackTargets |= mask;
+        // capture to "right"
+        if (file < 7) {
+            int right = curSquare + 9 * dir;
+            if (right >= 0 && right < 64 && ((enemyBB >>> right) & 1L) != 0) {
+                Piece captured = board.getPieceAtSquare(right);
+                list.add(new Move(curSquare, right, mover, captured, null, 0));
             }
-
         }
 
-        while (attackTargets != 0) {
-            int to = Long.numberOfTrailingZeros(attackTargets);
-            attackTargets &= attackTargets - 1;
+        // ---------- En passant ----------
 
-            Piece captured = ((enemy >>> to) & 1L) != 0 ? board.getPieceAtSquare(to) : null;
-            list.add(new Move(curSquare, to, mover, captured, null, 0));
-        }
-
-        while (movementTargets != 0){
-            int to = Long.numberOfTrailingZeros(movementTargets);
-            movementTargets &= movementTargets - 1;
-
-            Piece captured = ((enemy >>> to) & 1L) != 0 ? board.getPieceAtSquare(to) : null;
-            list.add(new Move(curSquare, to, mover, captured, null, 1));
-        }
 
         return list;
     }
+
 
     private static MoveList genBishops(Board board, int curSquare, boolean isWhite, Masks masks){
         MoveList list = new MoveList();
@@ -348,6 +318,7 @@ public final class MoveGen {
             Piece captured = ((enemy >>> to) & 1L) != 0 ? board.getPieceAtSquare(to) : null;
             list.add(new Move(curSquare, to, mover, captured, null, 0));
         }
+
         return list;
     }
 
@@ -439,7 +410,5 @@ public final class MoveGen {
 
         return legal;
     }
-
-
 
 }

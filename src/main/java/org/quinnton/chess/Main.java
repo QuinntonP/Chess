@@ -7,6 +7,11 @@ import javafx.scene.Scene;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import org.quinnton.chess.core.*;
+import org.quinnton.chess.core.perft.Perft;
+import org.quinnton.chess.core.perft.PerftPosition;
+import org.quinnton.chess.core.perft.PerftRunner;
+
+import java.util.List;
 
 public class Main extends Application {
 
@@ -18,16 +23,35 @@ public class Main extends Application {
         Board board = new Board(masks);
         board.loadFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
 
+        // =========================
+        // Perft tests at startup
+        // =========================
+
+        PerftPosition startPos = new PerftPosition(
+                "startpos",
+                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                new long[] {
+                        1L,      // depth 0
+                        20L,     // depth 1
+                        400L,    // depth 2
+                        8902L,   // depth 3
+                        197281  // depth 5
+                }
+        );
+
+        System.out.println("=== Running perft suite ===");
+        PerftRunner.runPerftSuite(List.of(startPos), masks);
+
+        // If you want a simple root breakdown for visual debugging:
+        System.out.println("=== Perft root breakdown (depth 2 from current board) ===");
+        Perft.perftRoot(board, masks, 4);
+
         int canvasSize = 800;
         BoardView view = new BoardView(board, canvasSize, Color.BEIGE, Color.TAN, Color.CORNFLOWERBLUE.deriveColor(0, 1, 1, 0.6), Color.RED.deriveColor(0, 1, 1, 0.6));
         Scene scene = new Scene(new Group(view.canvas), canvasSize, canvasSize);
         stage.setScene(scene);
         stage.setTitle("Chess");
         stage.show();
-
-        for (int i = 0; i < 4; i++){
-            System.out.println("move gen test for depth " + i + " : " + board.moveGenerationTest(i));
-        }
 
 
         // clicking logic
