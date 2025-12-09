@@ -205,23 +205,35 @@ public final class MoveGen {
         }
 
         // ---------- Captures ----------
-        long enemyBB = enemy;
-
-        // capture to "left" (from pawn's perspective)
-        if (file > 0) {
-            int left = curSquare + 7 * dir;
-            if (left >= 0 && left < 64 && ((enemyBB >>> left) & 1L) != 0) {
-                Piece captured = board.getPieceAtSquare(left);
-                list.add(new Move(curSquare, left, mover, captured, null, 0));
+        long enemyBB = enemy;if (isWhite) {
+            // White captures: NW (+7) and NE (+9)
+            if (file > 0) {
+                int left = curSquare + 7; // file-1, rank+1
+                if (left >= 0 && left < 64 && ((enemyBB >>> left) & 1L) != 0) {
+                    Piece captured = board.getPieceAtSquare(left);
+                    list.add(new Move(curSquare, left, mover, captured, null, 0));
+                }
+            }    if (file < 7) {
+                int right = curSquare + 9; // file+1, rank+1
+                if (right >= 0 && right < 64 && ((enemyBB >>> right) & 1L) != 0) {
+                    Piece captured = board.getPieceAtSquare(right);
+                    list.add(new Move(curSquare, right, mover, captured, null, 0));
+                }
             }
-        }
-
-        // capture to "right"
-        if (file < 7) {
-            int right = curSquare + 9 * dir;
-            if (right >= 0 && right < 64 && ((enemyBB >>> right) & 1L) != 0) {
-                Piece captured = board.getPieceAtSquare(right);
-                list.add(new Move(curSquare, right, mover, captured, null, 0));
+        } else {
+            // Black captures: SW (-9) and SE (-7)
+            if (file > 0) {
+                int left = curSquare - 9; // file-1, rank-1
+                if (left >= 0 && left < 64 && ((enemyBB >>> left) & 1L) != 0) {
+                    Piece captured = board.getPieceAtSquare(left);
+                    list.add(new Move(curSquare, left, mover, captured, null, 0));
+                }
+            }    if (file < 7) {
+                int right = curSquare - 7; // file+1, rank-1
+                if (right >= 0 && right < 64 && ((enemyBB >>> right) & 1L) != 0) {
+                    Piece captured = board.getPieceAtSquare(right);
+                    list.add(new Move(curSquare, right, mover, captured, null, 0));
+                }
             }
         }
 
