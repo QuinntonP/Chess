@@ -238,6 +238,36 @@ public final class MoveGen {
         }
 
         // ---------- En passant ----------
+        int ep = board.getEnPassantSquare();
+        if (ep == -1) {
+            // no en passant possible
+            return list;
+        }
+
+        // int rank = curSquare / 8; // optional if you want an extra rank guard
+
+        if (isWhite) {
+            // left white capture: +7 (file-1, rank+1)
+            if (file > 0 && curSquare + 7 == ep) {
+                list.add(new Move(curSquare, ep, mover, null, null, 5)); // flag 5 = EP
+            }
+
+            // right white capture: +9 (file+1, rank+1)
+            if (file < 7 && curSquare + 9 == ep) {
+                list.add(new Move(curSquare, ep, mover, null, null, 5));
+            }
+        } else {
+            // left black capture: -9 (file-1, rank-1)
+            if (file > 0 && curSquare - 9 == ep) {
+                list.add(new Move(curSquare, ep, mover, null, null, 5));
+            }
+
+            // right black capture: -7 (file+1, rank-1)
+            if (file < 7 && curSquare - 7 == ep) {
+                list.add(new Move(curSquare, ep, mover, null, null, 5));
+            }
+        }
+
 
 
         return list;

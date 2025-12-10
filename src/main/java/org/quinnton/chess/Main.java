@@ -35,16 +35,14 @@ public class Main extends Application {
                         20L,     // depth 1
                         400L,    // depth 2
                         8902L,   // depth 3
-                        197281  // depth 5
+                        197281L,  // depth 5
+                        4865609L  // depth 6
                 }
         );
 
         System.out.println("=== Running perft suite ===");
         PerftRunner.runPerftSuite(List.of(startPos), masks);
 
-        // If you want a simple root breakdown for visual debugging:
-        System.out.println("=== Perft root breakdown (depth 2 from current board) ===");
-        Perft.perftRoot(board, masks, 4);
 
         int canvasSize = 800;
         BoardView view = new BoardView(board, canvasSize, Color.BEIGE, Color.TAN, Color.CORNFLOWERBLUE.deriveColor(0, 1, 1, 0.6), Color.RED.deriveColor(0, 1, 1, 0.6));
