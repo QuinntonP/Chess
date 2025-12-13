@@ -28,7 +28,6 @@ public class Board {
         this.enPassantSquare = sq;
     }
 
-
     // castling
     boolean whiteKingHasMoved = false;
     boolean blackKingHasMoved = false;
@@ -85,7 +84,7 @@ public class Board {
         String sideToMove = (fields.length > 1) ? fields[1] : "w";
         String castling   = (fields.length > 2) ? fields[2] : "-";
         String epField    = (fields.length > 3) ? fields[3] : "-";
-        // halfmove/fullmove ignored for now
+        // half-move / full-move ignored for now
 
         // --- 1) Piece placement ---
         int rank = 7; // top row (a8)
@@ -176,49 +175,73 @@ public class Board {
 
 
 
-    public void makeMove(Move move){
+    public void makeMove(Move move) {
         Piece piece = move.piece;
-        Piece toPiece = move.capture;
+        Piece captured = move.capture;
+
+        prevEnPassantSquare = enPassantSquare;
+        enPassantSquare = -1;
 
         setBitboardBit(piece, move.from, false);
         setBitboardBit(piece, move.to, true);
 
-        if (toPiece != null){
-            setBitboardBit(toPiece, move.to, false);
-        }
-
-        // castling stuff
-        if (move.flags == 2 || move.flags == 3){
-            castleRooks(move);
-        }
-        checkCastlingPieces(move.from);
-
-        // if move is en-passant
-        if (move.flags == 5){
-            if (move.piece.isWhite()){
+        if (move.flags == 5) {
+            if (piece.isWhite()) {
                 setBitboardBit(Piece.BP, move.to - 8, false);
-            }
-            else{
+            } else {
                 setBitboardBit(Piece.WP, move.to + 8, false);
             }
-
+        } else if (captured != null) {
+            setBitboardBit(captured, move.to, false);
         }
+
+        if (move.flags == 2 || move.flags == 3) {
+            castleRooks(move);
+        }
+
+        checkCastlingPieces(move.from);
+
+        if ((piece == Piece.WP || piece == Piece.BP) && Math.abs(move.to - move.from) == 16) {
+            enPassantSquare = (move.from + move.to) / 2;
+        }
+
+        if (move.promo != null) {
+            setBitboardBit(piece, move.to, false);
+            setBitboardBit(move.promo, move.to, true);
+        }
+
+        updateKingSquares();
+        lookForChecks();
+    }
+
+
+
+    private void pawnPromotion(Move move){
+        setBitboardBit(move.piece, move.to, false);
+        setBitboardBit(move.promo, move.to, true);
+    }
+
+
+    private void enPassant(Move move){
+        if (move.piece.isWhite()){
+            setBitboardBit(Piece.BP, move.to - 8, false);
+        }
+        else{
+            setBitboardBit(Piece.WP, move.to + 8, false);
+        }
+
 
         // update en-passant square
         prevEnPassantSquare = enPassantSquare;
 
-        if ((move.piece == Piece.WP || move.piece == Piece.BP) && Math.abs(move.to - move.from) == 16) {
+            if ((move.piece == Piece.WP || move.piece == Piece.BP) && Math.abs(move.to - move.from) == 16) {
             enPassantSquare = (move.from + move.to) / 2; // middle square
         }
 
-        if (enPassantSquare == prevEnPassantSquare){
+            if (enPassantSquare == prevEnPassantSquare){
             prevEnPassantSquare = -1;
             enPassantSquare = -1;
         }
-
-        // checks
-        updateKingSquares();
-        lookForChecks();
     }
 
 
@@ -228,7 +251,7 @@ public class Board {
         if (move.piece.isWhite()){
             // White Queen side rook
             if (move.flags == 2){
-                rookMove = new Move(0, 3, Piece.WR, null, null, 0);
+                rookMove = new Move(0, 3, Piece.WR, null,null, 0);
             }
             // White King side rook
             if (move.flags == 3){
@@ -238,7 +261,7 @@ public class Board {
         else{
             if (move.flags == 2){
                 // Black Queen side rook
-                rookMove = new Move(56, 59, Piece.BR, null, null, 0);
+                rookMove = new Move(56, 59, Piece.BR, null,null, 0);
             }
             if (move.flags == 3){
                 // Black King side rook
@@ -438,21 +461,19 @@ public class Board {
 
     public void lookForCheckmate() {
         if (gameOver) return;
-
         if (!whiteInCheck && !blackInCheck) return;
 
-        if (whiteInCheck){
-            if (legalMoves.get(whiteKingSquare).isEmpty()){
-                System.out.println("Checkmate Black wins");
-            }
-        }
+        boolean noLegalMoves = (legalMoves == null || legalMoves.isEmpty());
 
-        if (blackInCheck){
-            if (legalMoves.get(blackKingSquare).isEmpty()){
-                System.out.println("Checkmate White wins");
-            }
+        if (whiteInCheck && noLegalMoves) {
+            System.out.println("Checkmate Black wins");
+        }
+        if (blackInCheck && noLegalMoves) {
+            System.out.println("Checkmate White wins");
         }
     }
+
+
 
 
     private void  updateKingSquares(){
@@ -473,73 +494,59 @@ public class Board {
      * - set lastMove / play sounds
      */
     public void makeMoveInternal(Move move) {
-        Piece piece    = move.piece;
+        Piece piece = move.piece;
         Piece captured = move.capture;
 
-        // --- Save EP state for undo ---
         move.prevEnPassantSquare = enPassantSquare;
+        enPassantSquare = -1;
 
-        // --- 1. Move the main piece ---
         setBitboardBit(piece, move.from, false);
         setBitboardBit(piece, move.to, true);
 
-        // --- 2. Handle capture / en-passant capture ---
         if (move.flags == 5) {
-            // En passant capture: captured pawn is *behind* the target square
             if (piece.isWhite()) {
-                // White pawn just moved from rank 5 to rank 6; black pawn is on to-8
                 setBitboardBit(Piece.BP, move.to - 8, false);
             } else {
-                // Black pawn just moved from rank 4 to rank 3; white pawn is on to+8
                 setBitboardBit(Piece.WP, move.to + 8, false);
             }
         } else if (captured != null) {
-            // Normal capture: captured piece sits on the 'to' square
             setBitboardBit(captured, move.to, false);
         }
 
-        // --- 3. Handle castling rook move (flags 2 = queenside, 3 = kingside) ---
         if (move.flags == 2 || move.flags == 3) {
             if (piece.isWhite()) {
-                // White castling
                 if (move.flags == 2) {
-                    // White queenside: king e1->c1, rook a1->d1
                     setBitboardBit(Piece.WR, 0, false);
                     setBitboardBit(Piece.WR, 3, true);
                 } else {
-                    // White kingside: king e1->g1, rook h1->f1
                     setBitboardBit(Piece.WR, 7, false);
                     setBitboardBit(Piece.WR, 5, true);
                 }
             } else {
-                // Black castling
                 if (move.flags == 2) {
-                    // Black queenside: king e8->c8, rook a8->d8
                     setBitboardBit(Piece.BR, 56, false);
                     setBitboardBit(Piece.BR, 59, true);
                 } else {
-                    // Black kingside: king e8->g8, rook h8->f8
                     setBitboardBit(Piece.BR, 63, false);
                     setBitboardBit(Piece.BR, 61, true);
                 }
             }
         }
 
-        // --- 4. Update en-passant square for the *new* position ---
-        int newEp = -1;
         if ((piece == Piece.WP || piece == Piece.BP) && Math.abs(move.to - move.from) == 16) {
-            // Double pawn push: EP target is the jumped-over square
-            newEp = (move.from + move.to) / 2;
+            enPassantSquare = (move.from + move.to) / 2;
         }
-        enPassantSquare = newEp;
 
-        // --- 5. Recompute checks + king squares in the new position ---
+        if (move.promo != null) {
+            setBitboardBit(piece, move.to, false);
+            setBitboardBit(move.promo, move.to, true);
+        }
+
         updateKingSquares();
         lookForChecks();
-
-        // --- 6. Flip side to move for engine / perft ---
         turnCounter++;
     }
+
 
 
     /**
@@ -547,61 +554,55 @@ public class Board {
      * Must exactly reverse the operations there.
      */
     public void unmakeMoveInternal(Move move) {
-        Piece piece    = move.piece;
+        Piece piece = move.piece;
         Piece captured = move.capture;
 
-        // --- 1. Flip side to move back ---
         turnCounter--;
 
-        // --- 2. Undo castling rook move first (if any) ---
         if (move.flags == 2 || move.flags == 3) {
             if (piece.isWhite()) {
                 if (move.flags == 2) {
-                    // Undo white queenside: rook d1->a1
                     setBitboardBit(Piece.WR, 3, false);
                     setBitboardBit(Piece.WR, 0, true);
                 } else {
-                    // Undo white kingside: rook f1->h1
                     setBitboardBit(Piece.WR, 5, false);
                     setBitboardBit(Piece.WR, 7, true);
                 }
             } else {
                 if (move.flags == 2) {
-                    // Undo black queenside: rook d8->a8
                     setBitboardBit(Piece.BR, 59, false);
                     setBitboardBit(Piece.BR, 56, true);
                 } else {
-                    // Undo black kingside: rook f8->h8
                     setBitboardBit(Piece.BR, 61, false);
                     setBitboardBit(Piece.BR, 63, true);
                 }
             }
         }
 
-        // --- 3. Move the main piece back ---
-        setBitboardBit(piece, move.to, false);
-        setBitboardBit(piece, move.from, true);
+        if (move.promo != null) {
+            setBitboardBit(move.promo, move.to, false);
+        } else {
+            setBitboardBit(piece, move.to, false);
+        }
 
-        // --- 4. Restore captured piece if any ---
         if (move.flags == 5) {
-            // Undo en passant: restore the pawn behind the target square
             if (piece.isWhite()) {
                 setBitboardBit(Piece.BP, move.to - 8, true);
             } else {
                 setBitboardBit(Piece.WP, move.to + 8, true);
             }
         } else if (captured != null) {
-            // Normal capture: captured piece was on 'to'
             setBitboardBit(captured, move.to, true);
         }
 
-        // --- 5. Restore en-passant square from before this move ---
+        setBitboardBit(piece, move.from, true);
+
         enPassantSquare = move.prevEnPassantSquare;
 
-        // --- 6. Recompute checks + king squares for the restored position ---
         updateKingSquares();
         lookForChecks();
     }
+
 
 
 }

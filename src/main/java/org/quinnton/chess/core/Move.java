@@ -13,7 +13,7 @@ public final class Move {
     1 for just movements like pawn pushes
     2 castling queen side
     3 castling king side
-    4 pawn promotion
+    4 ------------
     5 en-passant
      */
 

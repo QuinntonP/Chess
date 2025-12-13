@@ -12,10 +12,9 @@ Checking - Done
 Can't move a piece if it puts in check - Done
 Checkmate - Done
 Turns - Done
+Promotions - Done
+Enpassant - Done
 Move generation testing
-Promotions
-Enpassant
-
 
 
 Chess Bot :

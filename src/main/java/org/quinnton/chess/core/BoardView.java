@@ -6,6 +6,8 @@ import javafx.scene.image.Image;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -19,6 +21,10 @@ public class BoardView {
     private final int sqSize;
     private final GraphicsContext gc;
     private Set<Integer> highlights = Set.of();
+    private boolean drawPawnPromotion = false;
+    private final Map<Piece, Image> spriteCache = new HashMap<>();
+
+
 
     private long debugBitboard;
 
@@ -33,8 +39,22 @@ public class BoardView {
         this.gc = this.canvas.getGraphicsContext2D();
     }
 
+    private Image spriteFor(Piece p) {
+
+
+        return spriteCache.computeIfAbsent(p, piece ->
+                new Image(Objects.requireNonNull(
+                        getClass().getResourceAsStream("/sprites/" + piece.name + ".png")
+                )));
+    }
+
+
     public void setHighlights(Set<Integer> squares) {
         this.highlights = (squares == null) ? Set.of() : squares;
+    }
+
+    public void setDrawPawnPromotion(boolean show){
+        this.drawPawnPromotion = show;
     }
 
     public void clearHighlights() {
@@ -54,6 +74,11 @@ public class BoardView {
                 drawPiece(x, y);
             }
         }
+
+        if (drawPawnPromotion){
+            drawPawnPromotionWindow(board.getTurnCounter());
+        }
+
         // Debug
         // drawBitboardOverlay();
     }
@@ -86,10 +111,7 @@ public class BoardView {
         int square = (7 - y) * 8 + x;
         Piece piece = board.getPieceAtSquare(square);
         if (piece != null) {
-            Image sprite = new Image(Objects.requireNonNull(
-                    getClass().getResourceAsStream("/sprites/" + piece.name + ".png")
-            ));
-            gc.drawImage(sprite, x * sqSize, y * sqSize, sqSize, sqSize);
+            gc.drawImage(spriteFor(piece), x * sqSize, y * sqSize, sqSize, sqSize);
         }
     }
 
@@ -114,5 +136,28 @@ public class BoardView {
         }
     }
 
+
+    private void drawPawnPromotionWindow(boolean isWhite) {
+        int xPos = sqSize * 3;
+        int yPos = sqSize * 3;
+
+        Piece[] pieces = isWhite
+                ? new Piece[]{Piece.WQ, Piece.WR, Piece.WB, Piece.WN}
+                : new Piece[]{Piece.BQ, Piece.BR, Piece.BB, Piece.BN};
+
+        // background
+        gc.setFill(Color.GOLD.deriveColor(1,1, 1, 0.8));
+        gc.fillRect(xPos, yPos, sqSize * 2, sqSize * 2);
+
+        // pieces
+        for (int y = 0; y < 2; y++) {
+            for (int x = 0; x < 2; x++) {
+
+                Piece p = pieces[x + y * 2];
+
+                gc.drawImage(spriteFor(p), xPos + x * sqSize, yPos + y * sqSize, sqSize, sqSize);
+            }
+        }
+    }
 
 }

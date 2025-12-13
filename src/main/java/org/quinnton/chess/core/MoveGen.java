@@ -183,6 +183,8 @@ public final class MoveGen {
         int rank = curSquare / 8;
         int file = curSquare % 8;
 
+        boolean promotion = (isWhite && rank == 6) || (!isWhite && rank == 1);
+
         long occupied = board.getAllPieces();
         long enemy    = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();
         Piece mover   = isWhite ? Piece.WP : Piece.BP;
@@ -191,8 +193,14 @@ public final class MoveGen {
         // ---------- One step forward ----------
         int fwd = curSquare + 8 * dir;
         if (fwd >= 0 && fwd < 64 && ((occupied >>> fwd) & 1L) == 0) {
-            // (no promotion handling here yet – not needed for startpos perft 3)
-            list.add(new Move(curSquare, fwd, mover, null, null, 1));
+
+            // check for promotion
+            if (promotion){
+                list = addPawnPromotion(list, curSquare, fwd, mover, null, 1);
+            }
+            else{
+                list.add(new Move(curSquare, fwd, mover, null, null, 1));
+            }
 
             // ---------- Two steps forward (only from starting rank) ----------
             boolean onStartRank = (isWhite && rank == 1) || (!isWhite && rank == 6);
@@ -211,13 +219,28 @@ public final class MoveGen {
                 int left = curSquare + 7; // file-1, rank+1
                 if (left >= 0 && left < 64 && ((enemyBB >>> left) & 1L) != 0 || pawnAttackMask) {
                     Piece captured = board.getPieceAtSquare(left);
-                    list.add(new Move(curSquare, left, mover, captured, null, 0));
+
+                    // check promotion
+                    if (promotion){
+                        list = addPawnPromotion(list, curSquare, left, mover, captured, 0);
+                    }
+                    else{
+                        list.add(new Move(curSquare, left, mover, captured, null, 0));
+                    }
                 }
             }    if (file < 7) {
                 int right = curSquare + 9; // file+1, rank+1
                 if (right >= 0 && right < 64 && ((enemyBB >>> right) & 1L) != 0 || pawnAttackMask) {
                     Piece captured = board.getPieceAtSquare(right);
-                    list.add(new Move(curSquare, right, mover, captured, null, 0));
+
+                    // check promotion
+                    if (promotion){
+                        list = addPawnPromotion(list, curSquare, right, mover, captured, 0);
+                    }
+                    else{
+                        list.add(new Move(curSquare, right, mover, captured, null, 0));
+                    }
+
                 }
             }
         } else {
@@ -226,13 +249,29 @@ public final class MoveGen {
                 int left = curSquare - 9; // file-1, rank-1
                 if (left >= 0 && left < 64 && ((enemyBB >>> left) & 1L) != 0 || pawnAttackMask) {
                     Piece captured = board.getPieceAtSquare(left);
-                    list.add(new Move(curSquare, left, mover, captured, null, 0));
+
+                    // check promotion
+                    if (promotion){
+                        list = addPawnPromotion(list, curSquare, left, mover, captured, 0);
+                    }
+                    else{
+                        list.add(new Move(curSquare, left, mover, captured, null, 0));
+                    }
+
                 }
             }    if (file < 7) {
                 int right = curSquare - 7; // file+1, rank-1
                 if (right >= 0 && right < 64 && ((enemyBB >>> right) & 1L) != 0 || pawnAttackMask) {
                     Piece captured = board.getPieceAtSquare(right);
-                    list.add(new Move(curSquare, right, mover, captured, null, 0));
+
+                    // check promotion
+                    if (promotion){
+                        list = addPawnPromotion(list, curSquare, right, mover, captured, 0);
+                    }
+                    else{
+                        list.add(new Move(curSquare, right, mover, captured, null, 0));
+                    }
+
                 }
             }
         }
@@ -269,9 +308,23 @@ public final class MoveGen {
         }
 
 
-
         return list;
     }
+
+
+    private static MoveList addPawnPromotion(MoveList moveList, int from, int to, Piece piece, Piece capture, int flags){
+        Piece[] pieces = piece.isWhite()
+                ? new Piece[]{Piece.WQ, Piece.WR, Piece.WB, Piece.WN}
+                : new Piece[]{Piece.BQ, Piece.BR, Piece.BB, Piece.BN};
+
+        for (Piece promoPiece : pieces){
+            Move promoMove = new Move(from, to, piece, capture, promoPiece, flags);
+            moveList.add(promoMove);
+        }
+
+        return moveList;
+    }
+
 
 
     private static MoveList genBishops(Board board, int curSquare, boolean isWhite, Masks masks){

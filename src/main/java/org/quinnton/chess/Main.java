@@ -19,27 +19,28 @@ public class Main extends Application {
     public void start(Stage stage) {
         Masks masks = new Masks();
 
+        String fenString = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ";
+
         // setup
         Board board = new Board(masks);
-        board.loadFen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1 ");
+        board.loadFen(fenString);
 
         // =========================
         // Perft tests at startup
         // =========================
 
+
         PerftPosition startPos = new PerftPosition(
                 "startpos",
-                "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1 ",
+                    fenString,
                 new long[] {
-                        1L,        // depth 0
-                        14L,       // depth 1
-                        191L,
-                        2812L,
-                        43238L,
-                        674624L
+                        1L,
+                        48L,
+                        2039L,
                 }
         );
 
+        System.out.println("Running test with FEN" + fenString);
         System.out.println("=== Running perft suite ===");
         PerftRunner.runPerftSuite(List.of(startPos), masks);
 
