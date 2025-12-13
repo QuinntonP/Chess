@@ -60,8 +60,34 @@ public class Board {
         // Clear any previous position
         Arrays.fill(bitBoards, 0L);
 
-        String placement = fen.trim().split("\\s+")[0];
+        // Reset state that should not leak between positions
+        enPassantSquare = -1;
+        prevEnPassantSquare = -1;
 
+        whiteInCheck = false;
+        blackInCheck = false;
+
+        gameOver = false;
+        stalemate = false;
+        winnerIsWhite = null;
+
+        lastMove = null;
+        lastWhiteMove = null;
+        lastBlackMove = null;
+
+        // --- Parse fields ---
+        String[] fields = fen.trim().split("\\s+");
+        if (fields.length < 1) {
+            throw new IllegalArgumentException("Empty FEN");
+        }
+
+        String placement = fields[0];
+        String sideToMove = (fields.length > 1) ? fields[1] : "w";
+        String castling   = (fields.length > 2) ? fields[2] : "-";
+        String epField    = (fields.length > 3) ? fields[3] : "-";
+        // halfmove/fullmove ignored for now
+
+        // --- 1) Piece placement ---
         int rank = 7; // top row (a8)
         int file = 0; // a-file
 
@@ -92,12 +118,62 @@ public class Board {
             file++;
         }
 
-        // initialize first moves
-        legalMoves = MoveGen.generateLegalMoves(this, masks);
+        // --- 2) Side to move -> your turnCounter parity ---
+        // Your getTurnCounter(): even = white to move, odd = black to move
+        if (sideToMove.equals("w")) {
+            turnCounter = 0;
+        } else if (sideToMove.equals("b")) {
+            turnCounter = 1;
+        } else {
+            throw new IllegalArgumentException("Bad side-to-move field: " + sideToMove);
+        }
 
-        // look for initial checks
+        // --- 3) Castling rights -> set your "has moved" booleans ---
+        // Default to "moved" (so NO castling) unless rights explicitly present.
+        whiteKingHasMoved = true;
+        blackKingHasMoved = true;
+        whiteKingRookHasMoved = true;
+        whiteQueenRookHasMoved = true;
+        blackKingRookHasMoved = true;
+        blackQueenRookHasMoved = true;
+
+        if (!castling.equals("-")) {
+            if (castling.contains("K") || castling.contains("Q")) whiteKingHasMoved = false;
+            if (castling.contains("k") || castling.contains("q")) blackKingHasMoved = false;
+
+            if (castling.contains("K")) whiteKingRookHasMoved = false;
+            if (castling.contains("Q")) whiteQueenRookHasMoved = false;
+            if (castling.contains("k")) blackKingRookHasMoved = false;
+            if (castling.contains("q")) blackQueenRookHasMoved = false;
+        }
+
+        // --- 4) En-passant target square ---
+        if (epField.equals("-")) {
+            enPassantSquare = -1;
+        } else {
+            // "e3" style
+            if (epField.length() != 2) {
+                throw new IllegalArgumentException("Bad en-passant field: " + epField);
+            }
+            char fileChar = epField.charAt(0);
+            char rankChar = epField.charAt(1);
+
+            int epFile = fileChar - 'a';
+            int epRank = rankChar - '1';
+
+            if (epFile < 0 || epFile > 7 || epRank < 0 || epRank > 7) {
+                throw new IllegalArgumentException("Bad en-passant square: " + epField);
+            }
+
+            enPassantSquare = epRank * 8 + epFile; // a1=0 indexing
+        }
+
+        // --- 5) King squares + legal moves + initial checks ---
+        updateKingSquares();
+        legalMoves = MoveGen.generateLegalMoves(this, masks);
         lookForChecks();
     }
+
 
 
     public void makeMove(Move move){
@@ -318,7 +394,7 @@ public class Board {
         // All pieces for the side whose attacks we want
         long bb = byWhite ? getAllWhitePieces() : getAllBlackPieces();
 
-        HashMap<Integer, MoveList> allMoves = MoveGen.generatePseudoLegalMoves(this, masks, bb, false);
+        HashMap<Integer, MoveList> allMoves = MoveGen.generatePseudoLegalMoves(this, masks, bb, false, true);
 
         // **** this is all move to's currently it needs to filter by if they are attacks for things like pawn pushes -> castling -> etc.
         for (MoveList moveList : allMoves.values()) {

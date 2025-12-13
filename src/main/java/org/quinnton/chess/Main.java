@@ -21,7 +21,7 @@ public class Main extends Application {
 
         // setup
         Board board = new Board(masks);
-        board.loadFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
+        board.loadFen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1 ");
 
         // =========================
         // Perft tests at startup
@@ -29,20 +29,21 @@ public class Main extends Application {
 
         PerftPosition startPos = new PerftPosition(
                 "startpos",
-                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1 ",
                 new long[] {
-                        1L,      // depth 0
-                        20L,     // depth 1
-                        400L,    // depth 2
-                        8902L,   // depth 3
-                        197281L,  // depth 5
-                        4865609L  // depth 6
+                        1L,        // depth 0
+                        14L,       // depth 1
+                        191L,
+                        2812L,
+                        43238L,
+                        674624L
                 }
         );
 
         System.out.println("=== Running perft suite ===");
         PerftRunner.runPerftSuite(List.of(startPos), masks);
 
+        Perft.perftRoot(board, masks, 3);
 
         int canvasSize = 800;
         BoardView view = new BoardView(board, canvasSize, Color.BEIGE, Color.TAN, Color.CORNFLOWERBLUE.deriveColor(0, 1, 1, 0.6), Color.RED.deriveColor(0, 1, 1, 0.6));

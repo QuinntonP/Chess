@@ -38,6 +38,7 @@ public final class Perft {
     public static long perftRoot(Board board, Masks masks, int depth) {
         HashMap<Integer, MoveList> moves = MoveGen.generateLegalMoves(board, masks);
         long total = 0;
+        long totalCastling = 0;
 
         for (var entry : moves.entrySet()) {
             int fromSq = entry.getKey();
@@ -51,9 +52,15 @@ public final class Perft {
                 // Adjust Move#toString() however you like (SAN/uci/algebraic)
                 System.out.printf("%s: %d%n", moveToString(move), count);
                 total += count;
+
+                if (move.flags == 2 || move.flags == 3) {
+                    totalCastling += count;
+                }
+
             }
         }
 
+        System.out.println("Total castling is: " + totalCastling);
         System.out.printf("Total nodes at depth %d: %d%n", depth, total);
         return total;
     }

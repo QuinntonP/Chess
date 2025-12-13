@@ -7,11 +7,11 @@ import java.util.List;
 
 public final class MoveGen {
 
-    public static MoveList generate(Board board, int curSquare, Piece firstPiece, Masks masks, boolean includeCastling){
+    public static MoveList generate(Board board, int curSquare, Piece firstPiece, Masks masks, boolean includeCastling, boolean pawnAttackMask){
         MoveList list;
 
         list = switch (firstPiece) {
-            case WP, BP -> genPawns(board, curSquare, firstPiece.white);
+            case WP, BP -> genPawns(board, curSquare, firstPiece.white, pawnAttackMask);
             case WN, BN -> genKnights(board, curSquare, firstPiece.white, masks);
             case WB, BB -> genBishops(board, curSquare, firstPiece.white, masks);
             case WR, BR -> genRooks(board, curSquare, firstPiece.white, masks);
@@ -80,7 +80,7 @@ public final class MoveGen {
             }
 
             // ---------- White king-side castling (e1 -> g1) ----------
-            if (!board.whiteKingRookHasMoved) {
+            if (!board.whiteKingRookHasMoved && board.getPieceAtSquare(7) == Piece.WR) {
                 boolean emptyF1 = (occupied & (1L << 5)) == 0;
                 boolean emptyG1 = (occupied & (1L << 6)) == 0;
 
@@ -101,7 +101,7 @@ public final class MoveGen {
             }
 
             // ---------- White queen-side castling (e1 -> c1) ----------
-            if (!board.whiteQueenRookHasMoved) {
+            if (!board.whiteQueenRookHasMoved && board.getPieceAtSquare(0) == Piece.WR) {
                 boolean emptyB1 = (occupied & (1L << 1)) == 0;
                 boolean emptyC1 = (occupied & (1L << 2)) == 0;
                 boolean emptyD1 = (occupied & (1L << 3)) == 0;
@@ -128,7 +128,7 @@ public final class MoveGen {
             }
 
             // ---------- Black king-side castling (e8 -> g8) ----------
-            if (!board.blackKingRookHasMoved) {
+            if (!board.blackKingRookHasMoved && board.getPieceAtSquare(63) == Piece.BR) {
                 boolean emptyF8 = (occupied & (1L << 61)) == 0;
                 boolean emptyG8 = (occupied & (1L << 62)) == 0;
 
@@ -149,7 +149,7 @@ public final class MoveGen {
             }
 
             // ---------- Black queen-side castling (e8 -> c8) ----------
-            if (!board.blackQueenRookHasMoved) {
+            if (!board.blackQueenRookHasMoved && board.getPieceAtSquare(56) == Piece.BR) {
                 boolean emptyB8 = (occupied & (1L << 57)) == 0;
                 boolean emptyC8 = (occupied & (1L << 58)) == 0;
                 boolean emptyD8 = (occupied & (1L << 59)) == 0;
@@ -177,7 +177,7 @@ public final class MoveGen {
 
 
 
-    private static MoveList genPawns(Board board, int curSquare, boolean isWhite) {
+    private static MoveList genPawns(Board board, int curSquare, boolean isWhite, boolean pawnAttackMask) {
         MoveList list = new MoveList();
 
         int rank = curSquare / 8;
@@ -209,13 +209,13 @@ public final class MoveGen {
             // White captures: NW (+7) and NE (+9)
             if (file > 0) {
                 int left = curSquare + 7; // file-1, rank+1
-                if (left >= 0 && left < 64 && ((enemyBB >>> left) & 1L) != 0) {
+                if (left >= 0 && left < 64 && ((enemyBB >>> left) & 1L) != 0 || pawnAttackMask) {
                     Piece captured = board.getPieceAtSquare(left);
                     list.add(new Move(curSquare, left, mover, captured, null, 0));
                 }
             }    if (file < 7) {
                 int right = curSquare + 9; // file+1, rank+1
-                if (right >= 0 && right < 64 && ((enemyBB >>> right) & 1L) != 0) {
+                if (right >= 0 && right < 64 && ((enemyBB >>> right) & 1L) != 0 || pawnAttackMask) {
                     Piece captured = board.getPieceAtSquare(right);
                     list.add(new Move(curSquare, right, mover, captured, null, 0));
                 }
@@ -224,13 +224,13 @@ public final class MoveGen {
             // Black captures: SW (-9) and SE (-7)
             if (file > 0) {
                 int left = curSquare - 9; // file-1, rank-1
-                if (left >= 0 && left < 64 && ((enemyBB >>> left) & 1L) != 0) {
+                if (left >= 0 && left < 64 && ((enemyBB >>> left) & 1L) != 0 || pawnAttackMask) {
                     Piece captured = board.getPieceAtSquare(left);
                     list.add(new Move(curSquare, left, mover, captured, null, 0));
                 }
             }    if (file < 7) {
                 int right = curSquare - 7; // file+1, rank-1
-                if (right >= 0 && right < 64 && ((enemyBB >>> right) & 1L) != 0) {
+                if (right >= 0 && right < 64 && ((enemyBB >>> right) & 1L) != 0 || pawnAttackMask) {
                     Piece captured = board.getPieceAtSquare(right);
                     list.add(new Move(curSquare, right, mover, captured, null, 0));
                 }
@@ -380,7 +380,7 @@ public final class MoveGen {
             // Extra safety: make sure this piece matches side-to-move
             if (curPiece.isWhite() != whiteToMove) continue;
 
-            MoveList curMoves = generate(board, sq, curPiece, masks, includeCastling);
+            MoveList curMoves = generate(board, sq, curPiece, masks, includeCastling, false);
             if (!curMoves.isEmpty()) {
                 allMoves.put(sq, curMoves);
             }
@@ -390,7 +390,7 @@ public final class MoveGen {
     }
 
 
-    public static HashMap<Integer, MoveList> generatePseudoLegalMoves(Board board, Masks masks, Long bitboard, boolean includeCastling){
+    public static HashMap<Integer, MoveList> generatePseudoLegalMoves(Board board, Masks masks, Long bitboard, boolean includeCastling, boolean pawnAttackMask){
         HashMap<Integer, MoveList> allMoves = new HashMap<>();
 
         long bb = bitboard;
@@ -402,7 +402,7 @@ public final class MoveGen {
 
             if (curPiece == null) {continue;}
 
-            MoveList curMoves = generate(board, sq, curPiece, masks, includeCastling);
+            MoveList curMoves = generate(board, sq, curPiece, masks, includeCastling, pawnAttackMask);
 
             allMoves.put(sq, curMoves);
 
