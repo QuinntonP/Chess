@@ -9,36 +9,22 @@ public class Board {
     public final Masks masks;
     public Evaluate evaluate;
 
-    public Board(Masks masks) {
-        this.masks = masks;
-    }
-
     HashMap<Integer, MoveList> legalMoves;
 
     protected long[] bitBoards = new long[Piece.values().length];
     private int turnCounter = 0;
 
-
     // en-passant
     int enPassantSquare = -1;  // -1 = no en passant possible
     int prevEnPassantSquare = -1;
 
-    public int getEnPassantSquare() {
-        return enPassantSquare;
-    }
-
-    public void setEnPassantSquare(int sq) {
-        this.enPassantSquare = sq;
-    }
-
-    // castling
+    // castling rights flags
     boolean whiteKingHasMoved = false;
     boolean blackKingHasMoved = false;
     boolean whiteKingRookHasMoved = false;
     boolean whiteQueenRookHasMoved = false;
     boolean blackKingRookHasMoved = false;
     boolean blackQueenRookHasMoved = false;
-
 
     // checks
     public boolean whiteInCheck;
@@ -56,11 +42,25 @@ public class Board {
     Move lastWhiteMove;
     Move lastBlackMove;
 
+    // mailbox: fast piece lookup (must be kept in sync with bitboards!)
+    Piece[] mailbox = new Piece[64];
 
+    public Board(Masks masks) {
+        this.masks = masks;
+    }
+
+    public int getEnPassantSquare() {
+        return enPassantSquare;
+    }
+
+    public void setEnPassantSquare(int sq) {
+        this.enPassantSquare = sq;
+    }
 
     public void loadFen(String fen) {
         // Clear any previous position
         Arrays.fill(bitBoards, 0L);
+        Arrays.fill(mailbox, null);
 
         // Reset state that should not leak between positions
         enPassantSquare = -1;
@@ -79,15 +79,12 @@ public class Board {
 
         // --- Parse fields ---
         String[] fields = fen.trim().split("\\s+");
-        if (fields.length < 1) {
-            throw new IllegalArgumentException("Empty FEN");
-        }
+        if (fields.length < 1) throw new IllegalArgumentException("Empty FEN");
 
         String placement = fields[0];
         String sideToMove = (fields.length > 1) ? fields[1] : "w";
         String castling   = (fields.length > 2) ? fields[2] : "-";
         String epField    = (fields.length > 3) ? fields[3] : "-";
-        // half-move / full-move ignored for now
 
         // --- 1) Piece placement ---
         int rank = 7; // top row (a8)
@@ -103,7 +100,7 @@ public class Board {
             }
 
             if (Character.isDigit(c)) {
-                file += (c - '0'); // skip that many empty squares
+                file += (c - '0');
                 continue;
             }
 
@@ -117,11 +114,12 @@ public class Board {
 
             int idx = rank * 8 + file; // a1=0 … a8=56 … h8=63
             setBitboardBit(piece, idx, true);
+            mailbox[idx] = piece;
             file++;
         }
 
         // --- 2) Side to move -> your turnCounter parity ---
-        // Your getTurnCounter(): even = white to move, odd = black to move
+        // getTurnCounter(): true = white to move, false = black to move
         if (sideToMove.equals("w")) {
             turnCounter = 0;
         } else if (sideToMove.equals("b")) {
@@ -130,7 +128,7 @@ public class Board {
             throw new IllegalArgumentException("Bad side-to-move field: " + sideToMove);
         }
 
-        // --- 3) Castling rights -> set your "has moved" booleans ---
+        // --- 3) Castling rights ---
         // Default to "moved" (so NO castling) unless rights explicitly present.
         whiteKingHasMoved = true;
         blackKingHasMoved = true;
@@ -153,10 +151,7 @@ public class Board {
         if (epField.equals("-")) {
             enPassantSquare = -1;
         } else {
-            // "e3" style
-            if (epField.length() != 2) {
-                throw new IllegalArgumentException("Bad en-passant field: " + epField);
-            }
+            if (epField.length() != 2) throw new IllegalArgumentException("Bad en-passant field: " + epField);
             char fileChar = epField.charAt(0);
             char rankChar = epField.charAt(1);
 
@@ -178,145 +173,102 @@ public class Board {
         evaluate = new Evaluate(this);
     }
 
-
-
+    /**
+     * UI/game move: updates bitboards + mailbox + special moves.
+     * (SelectionController calls addTurnCounter() after this.)
+     */
     public void makeMove(Move move) {
-        Piece piece = move.piece;
-        Piece captured = move.capture;
+        Piece mover = move.piece;
 
         // save + clear EP by default
         prevEnPassantSquare = enPassantSquare;
         enPassantSquare = -1;
 
-        // move the piece
-        setBitboardBit(piece, move.from, false);
-        setBitboardBit(piece, move.to, true);
-
-        // CAPTURES
+        // -------------------------
+        // CAPTURE (mailbox is source of truth)
+        // -------------------------
         if (move.flags == 5) {
-            // en-passant capture: remove pawn behind destination
-            if (piece.isWhite()) {
-                setBitboardBit(Piece.BP, move.to - 8, false);
-            } else {
-                setBitboardBit(Piece.WP, move.to + 8, false);
+            // en-passant capture: pawn behind destination
+            int capSq = mover.isWhite() ? (move.to - 8) : (move.to + 8);
+            Piece capPiece = mailbox[capSq];
+            if (capPiece != null) {
+                setBitboardBit(capPiece, capSq, false);
             }
-        } else if (captured != null) {
-            // normal capture: remove piece on destination square
-            setBitboardBit(captured, move.to, false);
+            mailbox[capSq] = null;
+        } else {
+            Piece capPiece = mailbox[move.to];
+            if (capPiece != null) {
+                setBitboardBit(capPiece, move.to, false);
+                mailbox[move.to] = null;
+            }
         }
 
-        // CASTLING (move rook directly; do NOT call makeMove again)
+        // -------------------------
+        // MOVE mover piece
+        // -------------------------
+        setBitboardBit(mover, move.from, false);
+        mailbox[move.from] = null;
+
+        Piece placed = (move.promo != null) ? move.promo : mover;
+        setBitboardBit(placed, move.to, true);
+        mailbox[move.to] = placed;
+
+        // -------------------------
+        // CASTLING rook move
+        // flags: 2 = queen-side, 3 = king-side
+        // -------------------------
         if (move.flags == 2 || move.flags == 3) {
-            if (piece.isWhite()) {
-                if (move.flags == 2) {        // white queen-side: a1 -> d1
+            if (mover.isWhite()) {
+                if (move.flags == 2) { // white O-O-O: a1->d1
                     setBitboardBit(Piece.WR, 0, false);
                     setBitboardBit(Piece.WR, 3, true);
-                } else {                       // white king-side: h1 -> f1
+                    mailbox[0] = null;
+                    mailbox[3] = Piece.WR;
+                } else {              // white O-O: h1->f1
                     setBitboardBit(Piece.WR, 7, false);
                     setBitboardBit(Piece.WR, 5, true);
+                    mailbox[7] = null;
+                    mailbox[5] = Piece.WR;
                 }
             } else {
-                if (move.flags == 2) {        // black queen-side: a8 -> d8
+                if (move.flags == 2) { // black O-O-O: a8->d8
                     setBitboardBit(Piece.BR, 56, false);
                     setBitboardBit(Piece.BR, 59, true);
-                } else {                       // black king-side: h8 -> f8
+                    mailbox[56] = null;
+                    mailbox[59] = Piece.BR;
+                } else {               // black O-O: h8->f8
                     setBitboardBit(Piece.BR, 63, false);
                     setBitboardBit(Piece.BR, 61, true);
+                    mailbox[63] = null;
+                    mailbox[61] = Piece.BR;
                 }
             }
         }
 
-        // set new EP square only on pawn double-push
-        if ((piece == Piece.WP || piece == Piece.BP) && Math.abs(move.to - move.from) == 16) {
+        // -------------------------
+        // EP square only on pawn double push
+        // -------------------------
+        if ((mover == Piece.WP || mover == Piece.BP) && Math.abs(move.to - move.from) == 16) {
             enPassantSquare = (move.from + move.to) / 2;
         }
 
-        // PROMOTION
-        if (move.promo != null) {
-            setBitboardBit(piece, move.to, false);
-            setBitboardBit(move.promo, move.to, true);
-        }
-
-        // update castling rights flags (based on what moved)
+        // castling rights flags (based on what moved)
         checkCastlingPieces(move.from);
 
         updateKingSquares();
         lookForChecks();
     }
 
-
-
-
-    private void castleRooks(Move  move){
-        Move rookMove = null;
-
-        if (move.piece.isWhite()){
-            // White Queen side rook
-            if (move.flags == 2){
-                rookMove = new Move(0, 3, Piece.WR, null,null, 0);
-            }
-            // White King side rook
-            if (move.flags == 3){
-                rookMove = new Move(7, 5, Piece.WR, null, null, 0);
-            }
-        }
-        else{
-            if (move.flags == 2){
-                // Black Queen side rook
-                rookMove = new Move(56, 59, Piece.BR, null,null, 0);
-            }
-            if (move.flags == 3){
-                // Black King side rook
-                rookMove = new Move(63, 61, Piece.BR, null, null, 0);
-            }
-        }
-
-        if (rookMove != null){
-            makeMove(rookMove);
-        }
-    }
-
-
-    private void checkCastlingPieces(int square){
-        switch (square){
-            case 0 :
-                whiteQueenRookHasMoved = true;
-                break;
-            case 7 :
-                whiteKingRookHasMoved = true;
-                break;
-            case 56 :
-                blackQueenRookHasMoved = true;
-                break;
-            case 63 :
-                blackKingRookHasMoved = true;
-                break;
-
-            case 4 :
-                whiteKingHasMoved = true;
-                break;
-            case 60 :
-                blackKingHasMoved = true;
-                break;
-        }
-    }
-
-
-    public void setLastMove(Move move){
+    public void setLastMove(Move move) {
         lastMove = move;
-
-        if (move.piece.isWhite()){
-            lastWhiteMove = move;
-        }
-        else{
-            lastBlackMove = move;
-        }
+        if (move.piece.isWhite()) lastWhiteMove = move;
+        else lastBlackMove = move;
 
         playMoveSound(move);
     }
 
-    private void playMoveSound(Move move){
-        if (move.promo != null){
+    private void playMoveSound(Move move) {
+        if (move.promo != null) {
             SoundsPlayer.playPromoteSound();
         } else if (move.capture != null) {
             SoundsPlayer.playCaptureSound();
@@ -327,50 +279,31 @@ public class Board {
         }
     }
 
-    public Move getLastMove(){
-        return lastMove;
-    }
+    public Move getLastMove() { return lastMove; }
+    public Move getLastWhiteMove() { return lastWhiteMove; }
+    public Move getLastBlackMove() { return lastBlackMove; }
 
-    public Move getLastWhiteMove(){
-        return lastWhiteMove;
-    }
-
-    public Move getLastBlackMove(){
-        return lastBlackMove;
-    }
+    // ------------------------------------------------------------
+    // Bitboard + mailbox helpers
+    // ------------------------------------------------------------
 
     public void setBitboardBit(Piece piece, int square, boolean set) {
         long mask = 1L << square;
-        if (set) {
-            bitBoards[piece.ordinal()] |= mask;
-        } else {
-            bitBoards[piece.ordinal()] &= ~mask;
-        }
+        if (set) bitBoards[piece.ordinal()] |= mask;
+        else bitBoards[piece.ordinal()] &= ~mask;
     }
 
-
+    // mailbox-backed lookup (fast)
     public Piece getPieceAtSquare(int square) {
-        long mask = 1L << square;
-
-        for (int i = 0; i < bitBoards.length; i++) {
-            if ((bitBoards[i] & mask) != 0) {
-                return Piece.values()[i]; // map index -> Piece enum
-            }
-        }
-
-        return null; // empty square
+        return mailbox[square];
     }
-
 
     public long getAllWhitePieces() {
         long mask = 0L;
         Piece[] whites = { Piece.WK, Piece.WQ, Piece.WB, Piece.WR, Piece.WN, Piece.WP };
-        for (Piece p : whites) {
-            mask |= bitBoards[p.ordinal()];
-        }
+        for (Piece p : whites) mask |= bitBoards[p.ordinal()];
         return mask;
     }
-
 
     public long getAllBlackPieces() {
         long mask = 0L;
@@ -379,54 +312,45 @@ public class Board {
         return mask;
     }
 
-
     public long getAllPieces() {
         return getAllWhitePieces() | getAllBlackPieces();
     }
-
 
     public long getAllPawns() {
         return bitBoards[Piece.WP.ordinal()] | bitBoards[Piece.BP.ordinal()];
     }
 
-
     /**
-     *
-     * @return True if it is whites turns and False if it is blacks turn
+     * @return true if white to move, false if black to move
      */
     public boolean getTurnCounter() {
-        if (turnCounter % 2 == 0){
-            return true;
-        }
-        return false;
+        return (turnCounter % 2) == 0;
     }
-
 
     public void addTurnCounter() {
         this.turnCounter++;
         legalMoves = MoveGen.generateLegalMoves(this, masks);
     }
 
-
-    public HashMap<Integer, MoveList> getLegalMoves(){
+    public HashMap<Integer, MoveList> getLegalMoves() {
         return this.legalMoves;
     }
 
+    // ------------------------------------------------------------
+    // Check / attack logic (unchanged)
+    // ------------------------------------------------------------
 
     public long getAttackMask(boolean byWhite) {
         long mask = 0L;
 
-        // All pieces for the side whose attacks we want
         long bb = byWhite ? getAllWhitePieces() : getAllBlackPieces();
-
         HashMap<Integer, MoveList> allMoves = MoveGen.generatePseudoLegalMoves(this, masks, bb, false, true);
 
-        // **** this is all move to's currently it needs to filter by if they are attacks for things like pawn pushes -> castling -> etc.
         for (MoveList moveList : allMoves.values()) {
             for (Move move : moveList) {
                 int to = move.to;
-                if (move.flags == 0){
-                    mask |= 1L << to; // set the 'to' square as attacked
+                if (move.flags == 0) {
+                    mask |= 1L << to;
                 }
             }
         }
@@ -434,32 +358,16 @@ public class Board {
         return mask;
     }
 
-
     private void lookForChecks() {
-        // Squares attacked by the side who just moved
         long whiteAttackMask = getAttackMask(true);
-        long blackAttackmask = getAttackMask(false);
+        long blackAttackMask = getAttackMask(false);
 
-        long whiteKingMask =  bitBoards[Piece.WK.ordinal()];
+        long whiteKingMask = bitBoards[Piece.WK.ordinal()];
         long blackKingMask = bitBoards[Piece.BK.ordinal()];
 
-        // Check for white being in check
-        if ((whiteKingMask & blackAttackmask) != 0){
-            whiteInCheck = true;
-        }
-        else {
-            whiteInCheck = false;
-        }
-
-        // Check for black being in check
-        if ((blackKingMask & whiteAttackMask) != 0){
-            blackInCheck = true;
-        }
-        else{
-            blackInCheck = false;
-        }
+        whiteInCheck = (whiteKingMask & blackAttackMask) != 0;
+        blackInCheck = (blackKingMask & whiteAttackMask) != 0;
     }
-
 
     public void lookForCheckmate() {
         if (gameOver) return;
@@ -467,148 +375,164 @@ public class Board {
 
         boolean noLegalMoves = (legalMoves == null || legalMoves.isEmpty());
 
-        if (whiteInCheck && noLegalMoves) {
-            System.out.println("Checkmate Black wins");
-        }
-        if (blackInCheck && noLegalMoves) {
-            System.out.println("Checkmate White wins");
-        }
+        if (whiteInCheck && noLegalMoves) System.out.println("Checkmate Black wins");
+        if (blackInCheck && noLegalMoves) System.out.println("Checkmate White wins");
     }
 
-
-
-
-    private void  updateKingSquares(){
+    private void updateKingSquares() {
         whiteKingSquare = Utils.extractSquares(bitBoards[Piece.WK.ordinal()]).getFirst();
         blackKingSquare = Utils.extractSquares(bitBoards[Piece.BK.ordinal()]).getFirst();
     }
 
+    private void checkCastlingPieces(int square) {
+        switch (square) {
+            case 0  -> whiteQueenRookHasMoved = true;
+            case 7  -> whiteKingRookHasMoved = true;
+            case 56 -> blackQueenRookHasMoved = true;
+            case 63 -> blackKingRookHasMoved = true;
+            case 4  -> whiteKingHasMoved = true;
+            case 60 -> blackKingHasMoved = true;
+        }
+    }
 
-    /**
-     * Engine / move-gen version of makeMove:
-     * - moves pieces on bitboards
-     * - handles captures
-     * - handles castling rook move
-     * - updates check + king squares
-     * Does NOT:
-     * - update castling "has moved" booleans
-     * - update turnCounter or pseudoLegalMoves
-     * - set lastMove / play sounds
-     */
+    // ------------------------------------------------------------
+    // Engine make/unmake (MUST keep mailbox in sync)
+    // ------------------------------------------------------------
+
     public void makeMoveInternal(Move move) {
-        Piece piece = move.piece;
-        Piece captured = move.capture;
+        Piece mover = move.piece;
 
         move.prevEnPassantSquare = enPassantSquare;
         enPassantSquare = -1;
 
-        setBitboardBit(piece, move.from, false);
-        setBitboardBit(piece, move.to, true);
-
+        // capture
         if (move.flags == 5) {
-            if (piece.isWhite()) {
-                setBitboardBit(Piece.BP, move.to - 8, false);
-            } else {
-                setBitboardBit(Piece.WP, move.to + 8, false);
+            int capSq = mover.isWhite() ? (move.to - 8) : (move.to + 8);
+            Piece capPiece = mailbox[capSq];
+            if (capPiece != null) setBitboardBit(capPiece, capSq, false);
+            mailbox[capSq] = null;
+        } else if (move.capture != null) {
+            setBitboardBit(move.capture, move.to, false);
+            mailbox[move.to] = null;
+        } else {
+            // if capture info isn't set, mailbox still might have something (safety)
+            Piece capPiece = mailbox[move.to];
+            if (capPiece != null) {
+                setBitboardBit(capPiece, move.to, false);
+                mailbox[move.to] = null;
             }
-        } else if (captured != null) {
-            setBitboardBit(captured, move.to, false);
         }
 
+        // move mover
+        setBitboardBit(mover, move.from, false);
+        mailbox[move.from] = null;
+
+        Piece placed = (move.promo != null) ? move.promo : mover;
+        setBitboardBit(placed, move.to, true);
+        mailbox[move.to] = placed;
+
+        // castling rook move
         if (move.flags == 2 || move.flags == 3) {
-            if (piece.isWhite()) {
-                if (move.flags == 2) {
+            if (mover.isWhite()) {
+                if (move.flags == 2) { // a1->d1
                     setBitboardBit(Piece.WR, 0, false);
                     setBitboardBit(Piece.WR, 3, true);
-                } else {
+                    mailbox[0] = null;
+                    mailbox[3] = Piece.WR;
+                } else {              // h1->f1
                     setBitboardBit(Piece.WR, 7, false);
                     setBitboardBit(Piece.WR, 5, true);
+                    mailbox[7] = null;
+                    mailbox[5] = Piece.WR;
                 }
             } else {
-                if (move.flags == 2) {
+                if (move.flags == 2) { // a8->d8
                     setBitboardBit(Piece.BR, 56, false);
                     setBitboardBit(Piece.BR, 59, true);
-                } else {
+                    mailbox[56] = null;
+                    mailbox[59] = Piece.BR;
+                } else {               // h8->f8
                     setBitboardBit(Piece.BR, 63, false);
                     setBitboardBit(Piece.BR, 61, true);
+                    mailbox[63] = null;
+                    mailbox[61] = Piece.BR;
                 }
             }
         }
 
-        if ((piece == Piece.WP || piece == Piece.BP) && Math.abs(move.to - move.from) == 16) {
+        // EP square only on pawn double push
+        if ((mover == Piece.WP || mover == Piece.BP) && Math.abs(move.to - move.from) == 16) {
             enPassantSquare = (move.from + move.to) / 2;
-        }
-
-        if (move.promo != null) {
-            setBitboardBit(piece, move.to, false);
-            setBitboardBit(move.promo, move.to, true);
         }
 
         updateKingSquares();
         lookForChecks();
-
         turnCounter++;
     }
 
-
-
-    /**
-     * Undo a move previously done with makeMoveInternal.
-     * Must exactly reverse the operations there.
-     */
     public void unmakeMoveInternal(Move move) {
-        Piece piece = move.piece;
-        Piece captured = move.capture;
+        Piece mover = move.piece;
 
         turnCounter--;
 
+        // undo castling rook move first (so squares are free/accurate)
         if (move.flags == 2 || move.flags == 3) {
-            if (piece.isWhite()) {
-                if (move.flags == 2) {
+            if (mover.isWhite()) {
+                if (move.flags == 2) { // d1->a1
                     setBitboardBit(Piece.WR, 3, false);
                     setBitboardBit(Piece.WR, 0, true);
-                } else {
+                    mailbox[3] = null;
+                    mailbox[0] = Piece.WR;
+                } else {              // f1->h1
                     setBitboardBit(Piece.WR, 5, false);
                     setBitboardBit(Piece.WR, 7, true);
+                    mailbox[5] = null;
+                    mailbox[7] = Piece.WR;
                 }
             } else {
-                if (move.flags == 2) {
+                if (move.flags == 2) { // d8->a8
                     setBitboardBit(Piece.BR, 59, false);
                     setBitboardBit(Piece.BR, 56, true);
-                } else {
+                    mailbox[59] = null;
+                    mailbox[56] = Piece.BR;
+                } else {               // f8->h8
                     setBitboardBit(Piece.BR, 61, false);
                     setBitboardBit(Piece.BR, 63, true);
+                    mailbox[61] = null;
+                    mailbox[63] = Piece.BR;
                 }
             }
         }
 
-        if (move.promo != null) {
-            setBitboardBit(move.promo, move.to, false);
-        } else {
-            setBitboardBit(piece, move.to, false);
-        }
+        // remove placed piece from 'to'
+        Piece placed = (move.promo != null) ? move.promo : mover;
+        setBitboardBit(placed, move.to, false);
+        mailbox[move.to] = null;
 
+        // restore capture
         if (move.flags == 5) {
-            if (piece.isWhite()) {
-                setBitboardBit(Piece.BP, move.to - 8, true);
-            } else {
-                setBitboardBit(Piece.WP, move.to + 8, true);
-            }
-        } else if (captured != null) {
-            setBitboardBit(captured, move.to, true);
+            int capSq = mover.isWhite() ? (move.to - 8) : (move.to + 8);
+            Piece pawn = mover.isWhite() ? Piece.BP : Piece.WP;
+            setBitboardBit(pawn, capSq, true);
+            mailbox[capSq] = pawn;
+        } else if (move.capture != null) {
+            setBitboardBit(move.capture, move.to, true);
+            mailbox[move.to] = move.capture;
         }
 
-        setBitboardBit(piece, move.from, true);
+        // restore mover at from
+        setBitboardBit(mover, move.from, true);
+        mailbox[move.from] = mover;
 
+        // restore EP square
         enPassantSquare = move.prevEnPassantSquare;
 
         updateKingSquares();
         lookForChecks();
     }
 
-
-    // bitboard getters
-    public long getBitboard(Piece piece){
+    // bitboard getter
+    public long getBitboard(Piece piece) {
         return bitBoards[piece.ordinal()];
     }
 
@@ -616,6 +540,8 @@ public class Board {
         Board b = new Board(this.masks);
 
         b.bitBoards = this.bitBoards.clone();
+        b.mailbox = this.mailbox.clone();
+
         b.turnCounter = this.turnCounter;
 
         b.enPassantSquare = this.enPassantSquare;
@@ -638,11 +564,13 @@ public class Board {
         b.whiteKingSquare = this.whiteKingSquare;
         b.blackKingSquare = this.blackKingSquare;
 
-        // don't copy UI stuff (lastMove, sounds, etc) unless you need it
-        b.legalMoves = null; // bot should generate when needed
-        b.evaluate = new Evaluate(b); // rebuild from scratch ONCE
+        b.lastMove = null;
+        b.lastWhiteMove = null;
+        b.lastBlackMove = null;
+
+        b.legalMoves = null; // bot regenerates when needed
+        b.evaluate = new Evaluate(b);
 
         return b;
     }
-
 }
