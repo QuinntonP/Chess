@@ -6,6 +6,7 @@ import javafx.scene.Group;
 import javafx.scene.Scene;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
+import org.quinnton.chess.bot.Bot;
 import org.quinnton.chess.core.*;
 import org.quinnton.chess.core.perft.Perft;
 import org.quinnton.chess.core.perft.PerftPosition;
@@ -17,9 +18,10 @@ public class Main extends Application {
 
     @Override
     public void start(Stage stage) {
+        Bot bot = new Bot(); // your search class
         Masks masks = new Masks();
 
-        String fenString = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 ";
+        String fenString = "1n2k1n1/pppppppp/8/8/8/8/PPPPPPPP/1N2K1N1 w - - 0 1";
 
         // setup
         Board board = new Board(masks);
@@ -35,8 +37,9 @@ public class Main extends Application {
                     fenString,
                 new long[] {
                         1L,
-                        48L,
-                        2039L,
+                        20L,
+                        400L,
+                        8902L,
                 }
         );
 
@@ -55,7 +58,7 @@ public class Main extends Application {
 
 
         // clicking logic
-        SelectionController controller = new SelectionController(board, view);
+        SelectionController controller = new SelectionController(board, view, bot);
 
         view.canvas.setOnMouseClicked(e -> {
             int sq = Utils.intFromCoordinates(e.getX(), e.getY(), view.getSquareSize());

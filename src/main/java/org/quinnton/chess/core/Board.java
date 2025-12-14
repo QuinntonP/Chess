@@ -184,72 +184,67 @@ public class Board {
         Piece piece = move.piece;
         Piece captured = move.capture;
 
+        // save + clear EP by default
         prevEnPassantSquare = enPassantSquare;
         enPassantSquare = -1;
 
+        // move the piece
         setBitboardBit(piece, move.from, false);
         setBitboardBit(piece, move.to, true);
 
+        // CAPTURES
         if (move.flags == 5) {
+            // en-passant capture: remove pawn behind destination
             if (piece.isWhite()) {
                 setBitboardBit(Piece.BP, move.to - 8, false);
             } else {
                 setBitboardBit(Piece.WP, move.to + 8, false);
             }
         } else if (captured != null) {
+            // normal capture: remove piece on destination square
             setBitboardBit(captured, move.to, false);
         }
 
+        // CASTLING (move rook directly; do NOT call makeMove again)
         if (move.flags == 2 || move.flags == 3) {
-            castleRooks(move);
+            if (piece.isWhite()) {
+                if (move.flags == 2) {        // white queen-side: a1 -> d1
+                    setBitboardBit(Piece.WR, 0, false);
+                    setBitboardBit(Piece.WR, 3, true);
+                } else {                       // white king-side: h1 -> f1
+                    setBitboardBit(Piece.WR, 7, false);
+                    setBitboardBit(Piece.WR, 5, true);
+                }
+            } else {
+                if (move.flags == 2) {        // black queen-side: a8 -> d8
+                    setBitboardBit(Piece.BR, 56, false);
+                    setBitboardBit(Piece.BR, 59, true);
+                } else {                       // black king-side: h8 -> f8
+                    setBitboardBit(Piece.BR, 63, false);
+                    setBitboardBit(Piece.BR, 61, true);
+                }
+            }
         }
 
-        checkCastlingPieces(move.from);
-
+        // set new EP square only on pawn double-push
         if ((piece == Piece.WP || piece == Piece.BP) && Math.abs(move.to - move.from) == 16) {
             enPassantSquare = (move.from + move.to) / 2;
         }
 
+        // PROMOTION
         if (move.promo != null) {
             setBitboardBit(piece, move.to, false);
             setBitboardBit(move.promo, move.to, true);
         }
 
+        // update castling rights flags (based on what moved)
+        checkCastlingPieces(move.from);
+
         updateKingSquares();
         lookForChecks();
-
-        System.out.println("Evaluation score is : " + evaluate.score());
     }
 
 
-
-    private void pawnPromotion(Move move){
-        setBitboardBit(move.piece, move.to, false);
-        setBitboardBit(move.promo, move.to, true);
-    }
-
-
-    private void enPassant(Move move){
-        if (move.piece.isWhite()){
-            setBitboardBit(Piece.BP, move.to - 8, false);
-        }
-        else{
-            setBitboardBit(Piece.WP, move.to + 8, false);
-        }
-
-
-        // update en-passant square
-        prevEnPassantSquare = enPassantSquare;
-
-            if ((move.piece == Piece.WP || move.piece == Piece.BP) && Math.abs(move.to - move.from) == 16) {
-            enPassantSquare = (move.from + move.to) / 2; // middle square
-        }
-
-            if (enPassantSquare == prevEnPassantSquare){
-            prevEnPassantSquare = -1;
-            enPassantSquare = -1;
-        }
-    }
 
 
     private void castleRooks(Move  move){
@@ -551,7 +546,7 @@ public class Board {
 
         updateKingSquares();
         lookForChecks();
-        evaluate.updateMakeMove(move);
+
         turnCounter++;
     }
 
@@ -616,4 +611,38 @@ public class Board {
     public long getBitboard(Piece piece){
         return bitBoards[piece.ordinal()];
     }
+
+    public Board copy() {
+        Board b = new Board(this.masks);
+
+        b.bitBoards = this.bitBoards.clone();
+        b.turnCounter = this.turnCounter;
+
+        b.enPassantSquare = this.enPassantSquare;
+        b.prevEnPassantSquare = this.prevEnPassantSquare;
+
+        b.whiteKingHasMoved = this.whiteKingHasMoved;
+        b.blackKingHasMoved = this.blackKingHasMoved;
+        b.whiteKingRookHasMoved = this.whiteKingRookHasMoved;
+        b.whiteQueenRookHasMoved = this.whiteQueenRookHasMoved;
+        b.blackKingRookHasMoved = this.blackKingRookHasMoved;
+        b.blackQueenRookHasMoved = this.blackQueenRookHasMoved;
+
+        b.whiteInCheck = this.whiteInCheck;
+        b.blackInCheck = this.blackInCheck;
+
+        b.gameOver = this.gameOver;
+        b.stalemate = this.stalemate;
+        b.winnerIsWhite = this.winnerIsWhite;
+
+        b.whiteKingSquare = this.whiteKingSquare;
+        b.blackKingSquare = this.blackKingSquare;
+
+        // don't copy UI stuff (lastMove, sounds, etc) unless you need it
+        b.legalMoves = null; // bot should generate when needed
+        b.evaluate = new Evaluate(b); // rebuild from scratch ONCE
+
+        return b;
+    }
+
 }

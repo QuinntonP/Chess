@@ -1,11 +1,14 @@
 package org.quinnton.chess.core;
 
+import org.quinnton.chess.bot.Bot;
+
 import java.util.HashSet;
 import java.util.Set;
 
 public class SelectionController {
     private final Board board;
     private final BoardView view;
+    private final Bot bot;
 
     private Integer selectedFrom = null;
     private MoveList legalMoves = null;
@@ -14,10 +17,37 @@ public class SelectionController {
     private boolean decidingPromotion = false;
 
 
-    public SelectionController(Board board, BoardView view) {
+    public SelectionController(Board board, BoardView view, Bot bot) {
         this.board = board;
         this.view = view;
+        this.bot = bot;
     }
+
+    private void tryBotMove() {
+        if (board.gameOver) return;
+
+        boolean botPlaysWhite = false; // example
+        boolean whiteToMove = board.getTurnCounter();
+        boolean botToMove = (whiteToMove == botPlaysWhite);
+
+        if (!botToMove) return;
+
+        new Thread(() -> {
+            Board serachBoard = board.copy();
+            Move best = bot.findBestMove(serachBoard, 4);
+            if (best == null) return;
+
+            // ✅ apply move ON the FX thread
+            javafx.application.Platform.runLater(() -> {
+                board.makeMove(best);
+                board.addTurnCounter();
+                board.setLastMove(best);
+                board.lookForCheckmate();
+                clearSelection();
+            });
+        }, "Bot-Search-Thread").start();
+    }
+
 
 
     public void onSquareClick(int sq) {
@@ -91,8 +121,9 @@ public class SelectionController {
         board.addTurnCounter();
         board.setLastMove(move);
         board.lookForCheckmate();
-
         clearSelection();
+
+        tryBotMove();
     }
 
 
