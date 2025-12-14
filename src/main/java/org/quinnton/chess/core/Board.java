@@ -1,10 +1,13 @@
 package org.quinnton.chess.core;
 
+import org.quinnton.chess.bot.Evaluate;
+
 import java.util.Arrays;
 import java.util.HashMap;
 
 public class Board {
-    private final Masks masks;
+    public final Masks masks;
+    public Evaluate evaluate;
 
     public Board(Masks masks) {
         this.masks = masks;
@@ -38,11 +41,11 @@ public class Board {
 
 
     // checks
-    boolean whiteInCheck;
-    boolean blackInCheck;
+    public boolean whiteInCheck;
+    public boolean blackInCheck;
 
     // --- game state flags ---
-    boolean gameOver = false;
+    public boolean gameOver = false;
     boolean stalemate = false;
     Boolean winnerIsWhite = null; // null = no winner yet / draw
 
@@ -171,6 +174,8 @@ public class Board {
         updateKingSquares();
         legalMoves = MoveGen.generateLegalMoves(this, masks);
         lookForChecks();
+
+        evaluate = new Evaluate(this);
     }
 
 
@@ -212,6 +217,8 @@ public class Board {
 
         updateKingSquares();
         lookForChecks();
+
+        System.out.println("Evaluation score is : " + evaluate.score());
     }
 
 
@@ -544,6 +551,7 @@ public class Board {
 
         updateKingSquares();
         lookForChecks();
+        evaluate.updateMakeMove(move);
         turnCounter++;
     }
 
@@ -604,5 +612,8 @@ public class Board {
     }
 
 
-
+    // bitboard getters
+    public long getBitboard(Piece piece){
+        return bitBoards[piece.ordinal()];
+    }
 }

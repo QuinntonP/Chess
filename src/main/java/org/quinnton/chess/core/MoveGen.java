@@ -183,7 +183,7 @@ public final class MoveGen {
         int rank = curSquare / 8;
         int file = curSquare % 8;
 
-        boolean promotion = (isWhite && rank == 6) || (!isWhite && rank == 2);
+        boolean promotion = (isWhite && rank == 6) || (!isWhite && rank == 1);
 
         long occupied = board.getAllPieces();
         long enemy    = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();

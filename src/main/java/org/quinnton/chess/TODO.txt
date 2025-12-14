@@ -14,7 +14,7 @@ Checkmate - Done
 Turns - Done
 Promotions - Done
 Enpassant - Done
-Move generation testing
+Move generation testing - Done-ish (continue testing when you add magics)
 
 
 Chess Bot :
