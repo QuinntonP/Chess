@@ -298,6 +298,7 @@ public class Board {
         return mailbox[square];
     }
 
+
     public long getAllWhitePieces() {
         long mask = 0L;
         Piece[] whites = { Piece.WK, Piece.WQ, Piece.WB, Piece.WR, Piece.WN, Piece.WP };

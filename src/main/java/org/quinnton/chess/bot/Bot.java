@@ -9,7 +9,26 @@ public class Bot {
 
     private static final int MATE = 1_000_000;
 
+    // --- stats ---
+    private long nodes;        // positions visited
+    private long startNanos;   // start time
+
+    private void resetStats() {
+        nodes = 0;
+        startNanos = System.nanoTime();
+    }
+
+    private long elapsedMillis() {
+        return (System.nanoTime() - startNanos) / 1_000_000L;
+    }
+
+    public long getNodes() {
+        return nodes;
+    }
+
     public int alphaBeta(Board board, int depth, int ply, int alpha, int beta) {
+
+        nodes++; // count this node
 
         // Generate legal moves for THIS position
         var moves = MoveGen.generateLegalMoves(board, board.masks);
@@ -88,13 +107,22 @@ public class Bot {
         }
     }
 
-
     public int search(Board board, int depth) {
-        return alphaBeta(board, depth, 0, Integer.MIN_VALUE + 1, Integer.MAX_VALUE);
+        resetStats();
+        int score = alphaBeta(board, depth, 0, Integer.MIN_VALUE + 1, Integer.MAX_VALUE);
+
+        long ms = elapsedMillis();
+        double nps = ms > 0 ? (nodes * 1000.0) / ms : nodes;
+
+        System.out.printf("Bot search depth=%d time=%dms nodes=%d nps=%.0f score=%d%n",
+                depth, ms, nodes, nps, score);
+
+        return score;
     }
 
-
     public Move findBestMove(Board board, int depth) {
+        resetStats();
+
         var moves = MoveGen.generateLegalMoves(board, board.masks);
 
         boolean maximizing = board.getTurnCounter(); // true=white
@@ -134,7 +162,15 @@ public class Bot {
             }
         }
 
+        long ms = elapsedMillis();
+        double nps = ms > 0 ? (nodes * 1000.0) / ms : nodes;
+
+        System.out.printf("Bot findBestMove depth=%d time=%dms nodes=%d nps=%.0f best=%s score=%d%n",
+                depth, ms, nodes, nps,
+                (bestMove == null ? "null" : bestMove.toString()),
+                bestScore
+        );
+
         return bestMove;
     }
-
 }
