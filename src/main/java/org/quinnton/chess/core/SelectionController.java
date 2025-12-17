@@ -34,10 +34,10 @@ public class SelectionController {
 
         new Thread(() -> {
             Board serachBoard = board.copy();
-            // Move best = bot.findBestMove(serachBoard, 4);
+             Move best = bot.findBestMove(serachBoard, 4);
 
             // debug version
-            Move best = bot.findBestMove(board, 5);
+//            Move best = bot.findBestMove(board, 5);
             if (best == null) return;
 
             // ✅ apply move ON the FX thread

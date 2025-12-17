@@ -187,7 +187,7 @@ public class Board {
         // -------------------------
         // CAPTURE (mailbox is source of truth)
         // -------------------------
-        if (move.flags == 5) {
+        if (move.flags == 4) {
             // en-passant capture: pawn behind destination
             int capSq = mover.isWhite() ? (move.to - 8) : (move.to + 8);
             Piece capPiece = mailbox[capSq];
@@ -345,19 +345,30 @@ public class Board {
         long mask = 0L;
 
         long bb = byWhite ? getAllWhitePieces() : getAllBlackPieces();
-        HashMap<Integer, MoveList> allMoves = MoveGen.generatePseudoLegalMoves(this, masks, bb, false, true);
 
-        for (MoveList moveList : allMoves.values()) {
-            for (Move move : moveList) {
-                int to = move.to;
-                if (move.flags == 0) {
-                    mask |= 1L << to;
-                }
+        // Attack mask does NOT include castling; pawnAttackMask=true means
+        // pawn generators emit diagonal attacks even if empty.
+        MoveBuffer buf = new MoveBuffer(256);
+
+        while (bb != 0) {
+            int from = Long.numberOfTrailingZeros(bb);
+            bb &= bb - 1;
+
+            Piece p = getPieceAtSquare(from);
+            if (p == null) continue;
+            if (p.isWhite() != byWhite) continue;
+
+            buf.clear();
+            MoveGen.generateInto(this, from, p, masks, false, true, buf);
+
+            for (int i = 0; i < buf.size; i++) {
+                mask |= 1L << buf.moves[i].to;
             }
         }
 
         return mask;
     }
+
 
     private void lookForChecks() {
         long whiteAttackMask = getAttackMask(true);
@@ -407,7 +418,7 @@ public class Board {
         enPassantSquare = -1;
 
         // capture
-        if (move.flags == 5) {
+        if (move.flags == 4) {
             int capSq = mover.isWhite() ? (move.to - 8) : (move.to + 8);
             Piece capPiece = mailbox[capSq];
             if (capPiece != null) setBitboardBit(capPiece, capSq, false);
