@@ -30,52 +30,64 @@ public class Evaluate {
     }
 
     /**
-     * Apply eval deltas for a move. Call this exactly once per makeMoveInternal(move),
+     * Apply eval deltas for a move. Call this exactly once per makeMoveInternal(m),
      * and store the returned EvalUndo so unmake can reverse it.
      */
-    public EvalUndo updateMakeMove(Move m) {
+    public EvalUndo updateMakeMove(int m) {
         int matDelta = 0;
         int pstDelta = 0;
 
-        final Piece mover = m.piece;
+        final int from = Move.from(m);
+        final int to = Move.to(m);
+        final int flags = Move.flags(m);
+
+        final Piece mover = Move.piece(m);
+        final Piece promo = Move.promo(m);
 
         // 1) mover PST: remove from 'from', add at 'to'
-        pstDelta += pst(mover, m.to) - pst(mover, m.from);
+        // NOTE: for promotions we still treat "mover" as the pawn here; we fix PST below.
+        pstDelta += pst(mover, to) - pst(mover, from);
 
         // 2) captures (normal or en-passant)
-        if (m.capture != null) {
-            int capSq = m.to;
+        // For normal captures, capId will be non-zero.
+        // For EP, capId might be 0, so we handle EP explicitly.
+        if (Move.capId(m) != 0 || flags == Move.FLAG_EN_PASSANT) {
+            int capSq = to;
+            Piece captured;
 
-            // en passant capture square is behind the destination
-            if (m.flags == 5) {
-                capSq = mover.white ? (m.to - 8) : (m.to + 8);
+            if (flags == Move.FLAG_EN_PASSANT) {
+                // EP capture square is behind destination
+                capSq = mover.white ? (to - 8) : (to + 8);
+                captured = mover.white ? Piece.BP : Piece.WP;
+            } else {
+                captured = Move.capture(m);
             }
 
-            // captured piece is removed from board:
-            matDelta -= value(m.capture);
-            pstDelta -= pst(m.capture, capSq);
+            // captured piece is removed from board
+            matDelta -= value(captured);
+            pstDelta -= pst(captured, capSq);
         }
 
         // 3) promotion: pawn becomes promoted piece on 'to'
-        if (m.promo != null) {
+        if (promo != null) {
             // material: remove pawn, add promoted piece
-            matDelta += value(m.promo) - value(mover); // mover should be WP/BP here
+            matDelta += value(promo) - value(mover); // mover should be WP/BP here
 
             // PST: replace pawn-at-to with promo-at-to
-            pstDelta -= pst(mover, m.to);   // remove pawn-at-to we just added
-            pstDelta += pst(m.promo, m.to); // add promoted piece at to
+            pstDelta -= pst(mover, to);   // remove pawn-at-to we just added
+            pstDelta += pst(promo, to);   // add promoted piece at to
         }
 
         // 4) castling: rook moves too (PST only)
-        if (m.flags == 2 || m.flags == 3) {
+        if (flags == Move.FLAG_CASTLE_QS || flags == Move.FLAG_CASTLE_KS) {
             int rookFrom, rookTo;
             boolean white = mover.white;
 
-            if (m.flags == 3) { // king-side
+            if (flags == Move.FLAG_CASTLE_KS) { // king-side
                 // e1->g1 rook h1->f1 ; e8->g8 rook h8->f8
                 rookFrom = white ? 7 : 63;
                 rookTo   = white ? 5 : 61;
-            } else {            // queen-side
+            } else { // queen-side
                 // e1->c1 rook a1->d1 ; e8->c8 rook a8->d8
                 rookFrom = white ? 0 : 56;
                 rookTo   = white ? 3 : 59;
@@ -92,8 +104,8 @@ public class Evaluate {
     }
 
     /**
-     * Reverse eval deltas for unmakeMoveInternal(move).
-     * Pass the EvalUndo you got from updateMakeMove(move).
+     * Reverse eval deltas for unmakeMoveInternal(m).
+     * Pass the EvalUndo you got from updateMakeMove(m).
      */
     public void updateUnmakeMove(EvalUndo u) {
         materialScore -= u.matDelta;
@@ -123,7 +135,6 @@ public class Evaluate {
             case WR, BR -> 500;
             case WQ, BQ -> 900;
             case WK, BK -> 0;
-            default -> 0;
         };
         return p.white ? v : -v;
     }
@@ -141,7 +152,6 @@ public class Evaluate {
             case WR, BR -> ROOK_PST[s];
             case WQ, BQ -> QUEEN_PST[s];
             case WK, BK -> KING_MG_PST[s]; // later: blend MG/EG
-            default -> 0;
         };
         return p.white ? v : -v;
     }

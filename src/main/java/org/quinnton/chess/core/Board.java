@@ -3,22 +3,39 @@ package org.quinnton.chess.core;
 import org.quinnton.chess.bot.Evaluate;
 
 import java.util.Arrays;
-import java.util.HashMap;
 
 public class Board {
+
     public final Masks masks;
     public Evaluate evaluate;
 
-    HashMap<Integer, MoveList> legalMoves;
+    // ------------------------------------------------------------
+    // Move storage (flat, no HashMap)
+    // ------------------------------------------------------------
+    public static final int MAX_MOVES = 256;
+    private final int[] legalMoves = new int[MAX_MOVES];
+    private int legalMoveCount = 0;
 
+    // ------------------------------------------------------------
+    // Bitboards + mailbox
+    // ------------------------------------------------------------
     protected long[] bitBoards = new long[Piece.values().length];
+    // mailbox: fast piece lookup (must be kept in sync with bitboards!)
+    Piece[] mailbox = new Piece[64];
+
+    // ------------------------------------------------------------
+    // Turn
+    // ------------------------------------------------------------
     private int turnCounter = 0;
 
+    // ------------------------------------------------------------
     // en-passant
-    int enPassantSquare = -1;  // -1 = no en passant possible
-    int prevEnPassantSquare = -1;
+    // ------------------------------------------------------------
+    int enPassantSquare = -1;      // -1 = no en passant possible
 
-    // castling rights flags
+    // ------------------------------------------------------------
+    // castling rights flags (same as yours)
+    // ------------------------------------------------------------
     boolean whiteKingHasMoved = false;
     boolean blackKingHasMoved = false;
     boolean whiteKingRookHasMoved = false;
@@ -38,17 +55,34 @@ public class Board {
     int whiteKingSquare;
     int blackKingSquare;
 
-    Move lastMove;
-    Move lastWhiteMove;
-    Move lastBlackMove;
+    // last moves (encoded int); -1 means none
+    int lastMove = -1;
+    int lastWhiteMove = -1;
+    int lastBlackMove = -1;
 
-    // mailbox: fast piece lookup (must be kept in sync with bitboards!)
-    Piece[] mailbox = new Piece[64];
+    // ------------------------------------------------------------
+    // Undo stacks for INTERNAL make/unmake (search/perft)
+    // ------------------------------------------------------------
+    private static final int MAX_PLY = 2048;
+
+    private final int[] undoEp = new int[MAX_PLY];
+
+    // store captured piece id (0 = none). For EP we store pawn id.
+    private final int[] undoCapId = new int[MAX_PLY];
+
+    // store castling flags packed into bits
+    // bit 0: wK moved, 1: bK moved, 2: wKR moved, 3: wQR moved, 4: bKR moved, 5: bQR moved
+    private final int[] undoCastle = new int[MAX_PLY];
+
+    private int ply = 0;
 
     public Board(Masks masks) {
         this.masks = masks;
     }
 
+    // ------------------------------------------------------------
+    // Basic getters
+    // ------------------------------------------------------------
     public int getEnPassantSquare() {
         return enPassantSquare;
     }
@@ -57,14 +91,29 @@ public class Board {
         this.enPassantSquare = sq;
     }
 
+    /**
+     * @return true if white to move, false if black to move
+     */
+    public boolean getTurnCounter() {
+        return (turnCounter % 2) == 0;
+    }
+
+    public int[] getLegalMovesArray() {
+        return legalMoves;
+    }
+
+    public int getLegalMoveCount() {
+        return legalMoveCount;
+    }
+
+    // ------------------------------------------------------------
+    // FEN
+    // ------------------------------------------------------------
     public void loadFen(String fen) {
-        // Clear any previous position
         Arrays.fill(bitBoards, 0L);
         Arrays.fill(mailbox, null);
 
-        // Reset state that should not leak between positions
         enPassantSquare = -1;
-        prevEnPassantSquare = -1;
 
         whiteInCheck = false;
         blackInCheck = false;
@@ -73,22 +122,23 @@ public class Board {
         stalemate = false;
         winnerIsWhite = null;
 
-        lastMove = null;
-        lastWhiteMove = null;
-        lastBlackMove = null;
+        lastMove = -1;
+        lastWhiteMove = -1;
+        lastBlackMove = -1;
 
-        // --- Parse fields ---
+        ply = 0;
+
         String[] fields = fen.trim().split("\\s+");
         if (fields.length < 1) throw new IllegalArgumentException("Empty FEN");
 
-        String placement = fields[0];
+        String placement  = fields[0];
         String sideToMove = (fields.length > 1) ? fields[1] : "w";
         String castling   = (fields.length > 2) ? fields[2] : "-";
         String epField    = (fields.length > 3) ? fields[3] : "-";
 
         // --- 1) Piece placement ---
-        int rank = 7; // top row (a8)
-        int file = 0; // a-file
+        int rank = 7;
+        int file = 0;
 
         for (int i = 0; i < placement.length(); i++) {
             char c = placement.charAt(i);
@@ -112,14 +162,13 @@ public class Board {
                 default  -> throw new IllegalArgumentException("Bad piece char: " + c);
             };
 
-            int idx = rank * 8 + file; // a1=0 … a8=56 … h8=63
+            int idx = rank * 8 + file;
             setBitboardBit(piece, idx, true);
             mailbox[idx] = piece;
             file++;
         }
 
-        // --- 2) Side to move -> your turnCounter parity ---
-        // getTurnCounter(): true = white to move, false = black to move
+        // --- 2) Side to move ---
         if (sideToMove.equals("w")) {
             turnCounter = 0;
         } else if (sideToMove.equals("b")) {
@@ -129,7 +178,7 @@ public class Board {
         }
 
         // --- 3) Castling rights ---
-        // Default to "moved" (so NO castling) unless rights explicitly present.
+        // Default to moved=true (no castling) unless rights present
         whiteKingHasMoved = true;
         blackKingHasMoved = true;
         whiteKingRookHasMoved = true;
@@ -147,96 +196,93 @@ public class Board {
             if (castling.contains("q")) blackQueenRookHasMoved = false;
         }
 
-        // --- 4) En-passant target square ---
+        // --- 4) En-passant square ---
         if (epField.equals("-")) {
             enPassantSquare = -1;
         } else {
             if (epField.length() != 2) throw new IllegalArgumentException("Bad en-passant field: " + epField);
-            char fileChar = epField.charAt(0);
-            char rankChar = epField.charAt(1);
-
-            int epFile = fileChar - 'a';
-            int epRank = rankChar - '1';
-
+            int epFile = epField.charAt(0) - 'a';
+            int epRank = epField.charAt(1) - '1';
             if (epFile < 0 || epFile > 7 || epRank < 0 || epRank > 7) {
                 throw new IllegalArgumentException("Bad en-passant square: " + epField);
             }
-
-            enPassantSquare = epRank * 8 + epFile; // a1=0 indexing
+            enPassantSquare = epRank * 8 + epFile;
         }
 
-        // --- 5) King squares + legal moves + initial checks ---
         updateKingSquares();
-        legalMoves = MoveGen.generateLegalMoves(this, masks);
         lookForChecks();
+
+        // initial legal moves
+        legalMoveCount = MoveGen.generateLegalMovesFlat(this, masks, legalMoves);
 
         evaluate = new Evaluate(this);
     }
 
-    /**
-     * UI/game move: updates bitboards + mailbox + special moves.
-     * (SelectionController calls addTurnCounter() after this.)
-     */
-    public void makeMove(Move move) {
-        Piece mover = move.piece;
+    // ------------------------------------------------------------
+    // UI / Game move (encoded int)
+    // NOTE: SelectionController should call addTurnCounter() after this, as before.
+    // ------------------------------------------------------------
+    public void makeMove(int m) {
+        Piece mover = Move.piece(m);
+        int from = Move.from(m);
+        int to = Move.to(m);
+        int flags = Move.flags(m);
 
-        // save + clear EP by default
-        prevEnPassantSquare = enPassantSquare;
+        // save + clear EP by default (UI path can just store prev locally if needed)
+        int prevEp = enPassantSquare;
         enPassantSquare = -1;
 
         // -------------------------
-        // CAPTURE (mailbox is source of truth)
+        // CAPTURE
         // -------------------------
-        if (move.flags == 4) {
-            // en-passant capture: pawn behind destination
-            int capSq = mover.isWhite() ? (move.to - 8) : (move.to + 8);
+        if (flags == Move.FLAG_EN_PASSANT) {
+            int capSq = mover.isWhite() ? (to - 8) : (to + 8);
             Piece capPiece = mailbox[capSq];
-            if (capPiece != null) {
-                setBitboardBit(capPiece, capSq, false);
-            }
+            if (capPiece != null) setBitboardBit(capPiece, capSq, false);
             mailbox[capSq] = null;
         } else {
-            Piece capPiece = mailbox[move.to];
+            Piece capPiece = mailbox[to];
             if (capPiece != null) {
-                setBitboardBit(capPiece, move.to, false);
-                mailbox[move.to] = null;
+                setBitboardBit(capPiece, to, false);
+                mailbox[to] = null;
             }
         }
 
         // -------------------------
         // MOVE mover piece
         // -------------------------
-        setBitboardBit(mover, move.from, false);
-        mailbox[move.from] = null;
+        setBitboardBit(mover, from, false);
+        mailbox[from] = null;
 
-        Piece placed = (move.promo != null) ? move.promo : mover;
-        setBitboardBit(placed, move.to, true);
-        mailbox[move.to] = placed;
+        Piece promo = Move.promo(m);
+        Piece placed = (promo != null) ? promo : mover;
+
+        setBitboardBit(placed, to, true);
+        mailbox[to] = placed;
 
         // -------------------------
         // CASTLING rook move
-        // flags: 2 = queen-side, 3 = king-side
         // -------------------------
-        if (move.flags == 2 || move.flags == 3) {
+        if (flags == Move.FLAG_CASTLE_QS || flags == Move.FLAG_CASTLE_KS) {
             if (mover.isWhite()) {
-                if (move.flags == 2) { // white O-O-O: a1->d1
+                if (flags == Move.FLAG_CASTLE_QS) { // a1->d1
                     setBitboardBit(Piece.WR, 0, false);
                     setBitboardBit(Piece.WR, 3, true);
                     mailbox[0] = null;
                     mailbox[3] = Piece.WR;
-                } else {              // white O-O: h1->f1
+                } else { // h1->f1
                     setBitboardBit(Piece.WR, 7, false);
                     setBitboardBit(Piece.WR, 5, true);
                     mailbox[7] = null;
                     mailbox[5] = Piece.WR;
                 }
             } else {
-                if (move.flags == 2) { // black O-O-O: a8->d8
+                if (flags == Move.FLAG_CASTLE_QS) { // a8->d8
                     setBitboardBit(Piece.BR, 56, false);
                     setBitboardBit(Piece.BR, 59, true);
                     mailbox[56] = null;
                     mailbox[59] = Piece.BR;
-                } else {               // black O-O: h8->f8
+                } else { // h8->f8
                     setBitboardBit(Piece.BR, 63, false);
                     setBitboardBit(Piece.BR, 61, true);
                     mailbox[63] = null;
@@ -247,69 +293,83 @@ public class Board {
 
         // -------------------------
         // EP square only on pawn double push
+        // (your original logic: pawn moved 16 squares)
         // -------------------------
-        if ((mover == Piece.WP || mover == Piece.BP) && Math.abs(move.to - move.from) == 16) {
-            enPassantSquare = (move.from + move.to) / 2;
+        if ((mover == Piece.WP || mover == Piece.BP) && Math.abs(to - from) == 16) {
+            enPassantSquare = (from + to) / 2;
+        } else {
+            enPassantSquare = -1;
         }
 
         // castling rights flags (based on what moved)
-        checkCastlingPieces(move.from);
+        checkCastlingPieces(from);
+
+        // restore prevEp not used here (kept in internal undo stack instead)
+        // kept line to avoid “unused” confusion:
+        @SuppressWarnings("unused")
+        int _unusedPrevEp = prevEp;
 
         updateKingSquares();
         lookForChecks();
     }
 
-    public void setLastMove(Move move) {
-        lastMove = move;
-        if (move.piece.isWhite()) lastWhiteMove = move;
-        else lastBlackMove = move;
+    public void setLastMove(int m) {
+        lastMove = m;
+        Piece p = Move.piece(m);
+        if (p != null && p.isWhite()) lastWhiteMove = m;
+        else lastBlackMove = m;
 
-        playMoveSound(move);
+        playMoveSound(m);
     }
 
-    private void playMoveSound(Move move) {
-        if (move.promo != null) {
+    private void playMoveSound(int m) {
+        if (Move.promoId(m) != 0) {
             SoundsPlayer.playPromoteSound();
-        } else if (move.capture != null) {
+        } else if (Move.capId(m) != 0 || Move.flags(m) == Move.FLAG_EN_PASSANT) {
             SoundsPlayer.playCaptureSound();
-        } else if (move.flags == 2 || move.flags == 3) {
+        } else if (Move.flags(m) == Move.FLAG_CASTLE_QS || Move.flags(m) == Move.FLAG_CASTLE_KS) {
             SoundsPlayer.playCastleSound();
         } else {
             SoundsPlayer.playMoveSelfSound();
         }
     }
 
-    public Move getLastMove() { return lastMove; }
-    public Move getLastWhiteMove() { return lastWhiteMove; }
-    public Move getLastBlackMove() { return lastBlackMove; }
+    public int getLastMove() { return lastMove; }
+    public int getLastWhiteMove() { return lastWhiteMove; }
+    public int getLastBlackMove() { return lastBlackMove; }
 
     // ------------------------------------------------------------
     // Bitboard + mailbox helpers
     // ------------------------------------------------------------
-
     public void setBitboardBit(Piece piece, int square, boolean set) {
         long mask = 1L << square;
         if (set) bitBoards[piece.ordinal()] |= mask;
         else bitBoards[piece.ordinal()] &= ~mask;
     }
 
-    // mailbox-backed lookup (fast)
     public Piece getPieceAtSquare(int square) {
         return mailbox[square];
     }
 
-
     public long getAllWhitePieces() {
         long mask = 0L;
-        Piece[] whites = { Piece.WK, Piece.WQ, Piece.WB, Piece.WR, Piece.WN, Piece.WP };
-        for (Piece p : whites) mask |= bitBoards[p.ordinal()];
+        mask |= bitBoards[Piece.WK.ordinal()];
+        mask |= bitBoards[Piece.WQ.ordinal()];
+        mask |= bitBoards[Piece.WB.ordinal()];
+        mask |= bitBoards[Piece.WR.ordinal()];
+        mask |= bitBoards[Piece.WN.ordinal()];
+        mask |= bitBoards[Piece.WP.ordinal()];
         return mask;
     }
 
     public long getAllBlackPieces() {
         long mask = 0L;
-        Piece[] blacks = { Piece.BK, Piece.BQ, Piece.BB, Piece.BR, Piece.BN, Piece.BP };
-        for (Piece p : blacks) mask |= bitBoards[p.ordinal()];
+        mask |= bitBoards[Piece.BK.ordinal()];
+        mask |= bitBoards[Piece.BQ.ordinal()];
+        mask |= bitBoards[Piece.BB.ordinal()];
+        mask |= bitBoards[Piece.BR.ordinal()];
+        mask |= bitBoards[Piece.BN.ordinal()];
+        mask |= bitBoards[Piece.BP.ordinal()];
         return mask;
     }
 
@@ -321,34 +381,22 @@ public class Board {
         return bitBoards[Piece.WP.ordinal()] | bitBoards[Piece.BP.ordinal()];
     }
 
-    /**
-     * @return true if white to move, false if black to move
-     */
-    public boolean getTurnCounter() {
-        return (turnCounter % 2) == 0;
-    }
-
     public void addTurnCounter() {
         this.turnCounter++;
-        legalMoves = MoveGen.generateLegalMoves(this, masks);
-    }
-
-    public HashMap<Integer, MoveList> getLegalMoves() {
-        return this.legalMoves;
+        legalMoveCount = MoveGen.generateLegalMovesFlat(this, masks, legalMoves);
     }
 
     // ------------------------------------------------------------
-    // Check / attack logic (unchanged)
+    // Attack mask / check logic
     // ------------------------------------------------------------
-
     public long getAttackMask(boolean byWhite) {
         long mask = 0L;
 
         long bb = byWhite ? getAllWhitePieces() : getAllBlackPieces();
 
-        // Attack mask does NOT include castling; pawnAttackMask=true means
+        // Attack mask does NOT include castling; pawnAttackMask=true means:
         // pawn generators emit diagonal attacks even if empty.
-        MoveBuffer buf = new MoveBuffer(256);
+        int[] moves = new int[MAX_MOVES];
 
         while (bb != 0) {
             int from = Long.numberOfTrailingZeros(bb);
@@ -358,17 +406,16 @@ public class Board {
             if (p == null) continue;
             if (p.isWhite() != byWhite) continue;
 
-            buf.clear();
-            MoveGen.generateInto(this, from, p, masks, false, true, buf);
+            int count = MoveGen.generateInto(this, from, p, masks, false, true, moves, 0);
 
-            for (int i = 0; i < buf.size; i++) {
-                mask |= 1L << buf.moves[i].to;
+            for (int i = 0; i < count; i++) {
+                int to = Move.to(moves[i]);
+                mask |= 1L << to;
             }
         }
 
         return mask;
     }
-
 
     private void lookForChecks() {
         long whiteAttackMask = getAttackMask(true);
@@ -385,15 +432,17 @@ public class Board {
         if (gameOver) return;
         if (!whiteInCheck && !blackInCheck) return;
 
-        boolean noLegalMoves = (legalMoves == null || legalMoves.isEmpty());
+        boolean noLegalMoves = (legalMoveCount == 0);
 
         if (whiteInCheck && noLegalMoves) System.out.println("Checkmate Black wins");
         if (blackInCheck && noLegalMoves) System.out.println("Checkmate White wins");
     }
 
     private void updateKingSquares() {
-        whiteKingSquare = Utils.extractSquares(bitBoards[Piece.WK.ordinal()]).getFirst();
-        blackKingSquare = Utils.extractSquares(bitBoards[Piece.BK.ordinal()]).getFirst();
+        long wk = bitBoards[Piece.WK.ordinal()];
+        long bk = bitBoards[Piece.BK.ordinal()];
+        whiteKingSquare = (wk != 0) ? Long.numberOfTrailingZeros(wk) : -1;
+        blackKingSquare = (bk != 0) ? Long.numberOfTrailingZeros(bk) : -1;
     }
 
     private void checkCastlingPieces(int square) {
@@ -408,62 +457,77 @@ public class Board {
     }
 
     // ------------------------------------------------------------
-    // Engine make/unmake (MUST keep mailbox in sync)
+    // Engine make/unmake (encoded int). Keeps mailbox in sync.
+    // Uses undo stacks instead of storing prev state in Move objects.
     // ------------------------------------------------------------
+    public void makeMoveInternal(int m) {
+        if (ply >= MAX_PLY) throw new IllegalStateException("Undo stack overflow");
 
-    public void makeMoveInternal(Move move) {
-        Piece mover = move.piece;
+        // save undo state
+        undoEp[ply] = enPassantSquare;
+        undoCastle[ply] = packCastleFlags();
 
-        move.prevEnPassantSquare = enPassantSquare;
+        Piece mover = Move.piece(m);
+        int from = Move.from(m);
+        int to = Move.to(m);
+        int flags = Move.flags(m);
+
+        // clear EP by default
         enPassantSquare = -1;
 
-        // capture
-        if (move.flags == 4) {
-            int capSq = mover.isWhite() ? (move.to - 8) : (move.to + 8);
+        // capture handling (record captured id for undo)
+        int capturedId = 0;
+
+        if (flags == Move.FLAG_EN_PASSANT) {
+            int capSq = mover.isWhite() ? (to - 8) : (to + 8);
             Piece capPiece = mailbox[capSq];
+            capturedId = (capPiece == null) ? 0 : (capPiece.ordinal() + 1);
+
             if (capPiece != null) setBitboardBit(capPiece, capSq, false);
             mailbox[capSq] = null;
-        } else if (move.capture != null) {
-            setBitboardBit(move.capture, move.to, false);
-            mailbox[move.to] = null;
         } else {
-            // if capture info isn't set, mailbox still might have something (safety)
-            Piece capPiece = mailbox[move.to];
+            Piece capPiece = mailbox[to];
+            capturedId = (capPiece == null) ? 0 : (capPiece.ordinal() + 1);
+
             if (capPiece != null) {
-                setBitboardBit(capPiece, move.to, false);
-                mailbox[move.to] = null;
+                setBitboardBit(capPiece, to, false);
+                mailbox[to] = null;
             }
         }
 
-        // move mover
-        setBitboardBit(mover, move.from, false);
-        mailbox[move.from] = null;
+        undoCapId[ply] = capturedId;
 
-        Piece placed = (move.promo != null) ? move.promo : mover;
-        setBitboardBit(placed, move.to, true);
-        mailbox[move.to] = placed;
+        // move mover off from
+        setBitboardBit(mover, from, false);
+        mailbox[from] = null;
+
+        // place promo or mover on to
+        Piece promo = Move.promo(m);
+        Piece placed = (promo != null) ? promo : mover;
+        setBitboardBit(placed, to, true);
+        mailbox[to] = placed;
 
         // castling rook move
-        if (move.flags == 2 || move.flags == 3) {
+        if (flags == Move.FLAG_CASTLE_QS || flags == Move.FLAG_CASTLE_KS) {
             if (mover.isWhite()) {
-                if (move.flags == 2) { // a1->d1
+                if (flags == Move.FLAG_CASTLE_QS) { // a1->d1
                     setBitboardBit(Piece.WR, 0, false);
                     setBitboardBit(Piece.WR, 3, true);
                     mailbox[0] = null;
                     mailbox[3] = Piece.WR;
-                } else {              // h1->f1
+                } else { // h1->f1
                     setBitboardBit(Piece.WR, 7, false);
                     setBitboardBit(Piece.WR, 5, true);
                     mailbox[7] = null;
                     mailbox[5] = Piece.WR;
                 }
             } else {
-                if (move.flags == 2) { // a8->d8
+                if (flags == Move.FLAG_CASTLE_QS) { // a8->d8
                     setBitboardBit(Piece.BR, 56, false);
                     setBitboardBit(Piece.BR, 59, true);
                     mailbox[56] = null;
                     mailbox[59] = Piece.BR;
-                } else {               // h8->f8
+                } else { // h8->f8
                     setBitboardBit(Piece.BR, 63, false);
                     setBitboardBit(Piece.BR, 61, true);
                     mailbox[63] = null;
@@ -473,41 +537,57 @@ public class Board {
         }
 
         // EP square only on pawn double push
-        if ((mover == Piece.WP || mover == Piece.BP) && Math.abs(move.to - move.from) == 16) {
-            enPassantSquare = (move.from + move.to) / 2;
+        if ((mover == Piece.WP || mover == Piece.BP) && Math.abs(to - from) == 16) {
+            enPassantSquare = (from + to) / 2;
         }
+
+        // update castling rights if king/rook moved
+        checkCastlingPieces(from);
 
         updateKingSquares();
         lookForChecks();
+
         turnCounter++;
+        ply++;
     }
 
-    public void unmakeMoveInternal(Move move) {
-        Piece mover = move.piece;
+    public void unmakeMoveInternal(int m) {
+        ply--;
+        if (ply < 0) throw new IllegalStateException("Undo stack underflow");
 
         turnCounter--;
 
-        // undo castling rook move first (so squares are free/accurate)
-        if (move.flags == 2 || move.flags == 3) {
+        Piece mover = Move.piece(m);
+        int from = Move.from(m);
+        int to = Move.to(m);
+        int flags = Move.flags(m);
+
+        // restore castling flags + EP at end, but we need them packed now
+        int prevEp = undoEp[ply];
+        int prevCastle = undoCastle[ply];
+        int capturedId = undoCapId[ply];
+
+        // undo castling rook move first
+        if (flags == Move.FLAG_CASTLE_QS || flags == Move.FLAG_CASTLE_KS) {
             if (mover.isWhite()) {
-                if (move.flags == 2) { // d1->a1
+                if (flags == Move.FLAG_CASTLE_QS) { // d1->a1
                     setBitboardBit(Piece.WR, 3, false);
                     setBitboardBit(Piece.WR, 0, true);
                     mailbox[3] = null;
                     mailbox[0] = Piece.WR;
-                } else {              // f1->h1
+                } else { // f1->h1
                     setBitboardBit(Piece.WR, 5, false);
                     setBitboardBit(Piece.WR, 7, true);
                     mailbox[5] = null;
                     mailbox[7] = Piece.WR;
                 }
             } else {
-                if (move.flags == 2) { // d8->a8
+                if (flags == Move.FLAG_CASTLE_QS) { // d8->a8
                     setBitboardBit(Piece.BR, 59, false);
                     setBitboardBit(Piece.BR, 56, true);
                     mailbox[59] = null;
                     mailbox[56] = Piece.BR;
-                } else {               // f8->h8
+                } else { // f8->h8
                     setBitboardBit(Piece.BR, 61, false);
                     setBitboardBit(Piece.BR, 63, true);
                     mailbox[61] = null;
@@ -517,30 +597,55 @@ public class Board {
         }
 
         // remove placed piece from 'to'
-        Piece placed = (move.promo != null) ? move.promo : mover;
-        setBitboardBit(placed, move.to, false);
-        mailbox[move.to] = null;
-
-        // restore capture
-        if (move.flags == 5) {
-            int capSq = mover.isWhite() ? (move.to - 8) : (move.to + 8);
-            Piece pawn = mover.isWhite() ? Piece.BP : Piece.WP;
-            setBitboardBit(pawn, capSq, true);
-            mailbox[capSq] = pawn;
-        } else if (move.capture != null) {
-            setBitboardBit(move.capture, move.to, true);
-            mailbox[move.to] = move.capture;
-        }
+        Piece promo = Move.promo(m);
+        Piece placed = (promo != null) ? promo : mover;
+        setBitboardBit(placed, to, false);
+        mailbox[to] = null;
 
         // restore mover at from
-        setBitboardBit(mover, move.from, true);
-        mailbox[move.from] = mover;
+        setBitboardBit(mover, from, true);
+        mailbox[from] = mover;
 
-        // restore EP square
-        enPassantSquare = move.prevEnPassantSquare;
+        // restore capture
+        if (capturedId != 0) {
+            Piece capPiece = Piece.values()[capturedId - 1];
+
+            if (flags == Move.FLAG_EN_PASSANT) {
+                int capSq = mover.isWhite() ? (to - 8) : (to + 8);
+                setBitboardBit(capPiece, capSq, true);
+                mailbox[capSq] = capPiece;
+            } else {
+                setBitboardBit(capPiece, to, true);
+                mailbox[to] = capPiece;
+            }
+        }
+
+        // restore EP + castling flags
+        enPassantSquare = prevEp;
+        unpackCastleFlags(prevCastle);
 
         updateKingSquares();
         lookForChecks();
+    }
+
+    private int packCastleFlags() {
+        int x = 0;
+        if (whiteKingHasMoved) x |= 1;
+        if (blackKingHasMoved) x |= 2;
+        if (whiteKingRookHasMoved) x |= 4;
+        if (whiteQueenRookHasMoved) x |= 8;
+        if (blackKingRookHasMoved) x |= 16;
+        if (blackQueenRookHasMoved) x |= 32;
+        return x;
+    }
+
+    private void unpackCastleFlags(int x) {
+        whiteKingHasMoved = (x & 1) != 0;
+        blackKingHasMoved = (x & 2) != 0;
+        whiteKingRookHasMoved = (x & 4) != 0;
+        whiteQueenRookHasMoved = (x & 8) != 0;
+        blackKingRookHasMoved = (x & 16) != 0;
+        blackQueenRookHasMoved = (x & 32) != 0;
     }
 
     // bitboard getter
@@ -555,9 +660,7 @@ public class Board {
         b.mailbox = this.mailbox.clone();
 
         b.turnCounter = this.turnCounter;
-
         b.enPassantSquare = this.enPassantSquare;
-        b.prevEnPassantSquare = this.prevEnPassantSquare;
 
         b.whiteKingHasMoved = this.whiteKingHasMoved;
         b.blackKingHasMoved = this.blackKingHasMoved;
@@ -576,11 +679,13 @@ public class Board {
         b.whiteKingSquare = this.whiteKingSquare;
         b.blackKingSquare = this.blackKingSquare;
 
-        b.lastMove = null;
-        b.lastWhiteMove = null;
-        b.lastBlackMove = null;
+        b.lastMove = -1;
+        b.lastWhiteMove = -1;
+        b.lastBlackMove = -1;
 
-        b.legalMoves = null; // bot regenerates when needed
+        b.legalMoveCount = 0;
+        // legalMoves array is already allocated in constructor
+
         b.evaluate = new Evaluate(b);
 
         return b;

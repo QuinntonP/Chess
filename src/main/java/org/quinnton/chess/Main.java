@@ -39,7 +39,9 @@ public class Main extends Application {
                         1L,
                         20L,
                         400L,
-                        8902L
+                        8902L,
+                        197281L,
+                        4865609L
                 }
         );
 

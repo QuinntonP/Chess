@@ -1,10 +1,13 @@
 package org.quinnton.chess.core.perft;
 
-import org.quinnton.chess.core.*;
-
-import java.util.HashMap;
+import org.quinnton.chess.core.Board;
+import org.quinnton.chess.core.Move;
+import org.quinnton.chess.core.MoveGen;
+import org.quinnton.chess.core.Masks;
 
 public final class Perft {
+
+    private static final int MAX_MOVES = 256;
 
     private Perft() {}
 
@@ -13,19 +16,18 @@ public final class Perft {
      * counts the number of leaf nodes at a given depth.
      */
     public static long perft(Board board, Masks masks, int depth) {
-        if (depth == 0) {
-            return 1;
-        }
+        if (depth == 0) return 1;
 
-        HashMap<Integer, MoveList> moves = MoveGen.generateLegalMoves(board, masks);
+        int[] moves = new int[MAX_MOVES];
+        int moveCount = MoveGen.generateLegalMovesFlat(board, masks, moves);
+
         long nodes = 0;
+        for (int i = 0; i < moveCount; i++) {
+            int m = moves[i];
 
-        for (MoveList list : moves.values()) {
-            for (Move move : list) {
-                board.makeMoveInternal(move);
-                nodes += perft(board, masks, depth - 1);
-                board.unmakeMoveInternal(move);
-            }
+            board.makeMoveInternal(m);
+            nodes += perft(board, masks, depth - 1);
+            board.unmakeMoveInternal(m);
         }
 
         return nodes;
@@ -36,45 +38,30 @@ public final class Perft {
      * Good for comparing to perft tables (like perftree output).
      */
     public static long perftRoot(Board board, Masks masks, int depth) {
-        HashMap<Integer, MoveList> moves = MoveGen.generateLegalMoves(board, masks);
+        int[] moves = new int[MAX_MOVES];
+        int moveCount = MoveGen.generateLegalMovesFlat(board, masks, moves);
+
         long total = 0;
         long totalCastling = 0;
 
-        for (var entry : moves.entrySet()) {
-            int fromSq = entry.getKey();
-            MoveList list = entry.getValue();
+        for (int i = 0; i < moveCount; i++) {
+            int m = moves[i];
 
-            for (Move move : list) {
-                board.makeMoveInternal(move);
-                long count = perft(board, masks, depth - 1);
-                board.unmakeMoveInternal(move);
+            board.makeMoveInternal(m);
+            long count = perft(board, masks, depth - 1);
+            board.unmakeMoveInternal(m);
 
-                // Adjust Move#toString() however you like (SAN/uci/algebraic)
-                System.out.printf("%s: %d%n", moveToString(move), count);
-                total += count;
+            System.out.printf("%s: %d%n", Move.toUci(m), count);
+            total += count;
 
-                if (move.flags == 2 || move.flags == 3) {
-                    totalCastling += count;
-                }
-
+            int f = Move.flags(m);
+            if (f == Move.FLAG_CASTLE_QS || f == Move.FLAG_CASTLE_KS) {
+                totalCastling += count;
             }
         }
 
         System.out.println("Total castling is: " + totalCastling);
         System.out.printf("Total nodes at depth %d: %d%n", depth, total);
         return total;
-    }
-
-    // Minimal algebraic-ish formatter (file/rank only, no disambiguation)
-    private static String moveToString(Move m) {
-        return squareToString(m.from) + squareToString(m.to);
-    }
-
-    private static String squareToString(int sq) {
-        int file = sq % 8;
-        int rank = sq / 8;
-        char f = (char) ('a' + file);
-        char r = (char) ('1' + rank);
-        return "" + f + r;
     }
 }

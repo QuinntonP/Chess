@@ -1,38 +1,44 @@
 package org.quinnton.chess.core;
 
-import java.util.HashMap;
-
 public final class MoveGen {
     private static final int MAX_MOVES = 256;
 
-    // ---------------------------
-    // Core entry: append moves into a buffer
-    // ---------------------------
-    public static void generateInto(
+    private MoveGen() {}
+
+    // ------------------------------------------------------------
+    // Core entry: append moves into `out`, return updated count
+    // ------------------------------------------------------------
+    public static int generateInto(
             Board board,
             int fromSq,
             Piece piece,
             Masks masks,
             boolean includeCastling,
             boolean pawnAttackMask,
-            MoveBuffer out
+            int[] out,
+            int count
     ) {
-        switch (piece) {
-            case WP, BP -> genPawns(board, fromSq, piece.isWhite(), pawnAttackMask, out);
-            case WN, BN -> genKnights(board, fromSq, piece.isWhite(), masks, out);
-            case WB, BB -> genBishops(board, fromSq, piece.isWhite(), masks, out);
-            case WR, BR -> genRooks(board, fromSq, piece.isWhite(), masks, out);
-            case WQ, BQ -> genQueens(board, fromSq, piece.isWhite(), masks, out);
-            case WK, BK -> genKings(board, fromSq, piece.isWhite(), masks, includeCastling, out);
-        }
+        return switch (piece) {
+            case WP, BP -> genPawns(board, fromSq, piece.isWhite(), pawnAttackMask, out, count);
+            case WN, BN -> genKnights(board, fromSq, piece.isWhite(), masks, out, count);
+            case WB, BB -> genBishops(board, fromSq, piece.isWhite(), masks, out, count);
+            case WR, BR -> genRooks(board, fromSq, piece.isWhite(), masks, out, count);
+            case WQ, BQ -> genQueens(board, fromSq, piece.isWhite(), masks, out, count);
+            case WK, BK -> genKings(board, fromSq, piece.isWhite(), masks, includeCastling, out, count);
+        };
     }
 
-    // ---------------------------
-    // Fast flat pseudo-legal generation (best for search)
-    // ---------------------------
-    public static MoveBuffer generatePseudoLegalMovesFlat(Board board, Masks masks, boolean includeCastling) {
-        MoveBuffer out = new MoveBuffer(MAX_MOVES);
-        out.clear();
+    // ------------------------------------------------------------
+    // Flat pseudo-legal generation (best for search)
+    // Caller provides `out` and receives count
+    // ------------------------------------------------------------
+    public static int generatePseudoLegalMovesFlat(
+            Board board,
+            Masks masks,
+            boolean includeCastling,
+            int[] out
+    ) {
+        int count = 0;
 
         boolean whiteToMove = board.getTurnCounter();
         long bb = whiteToMove ? board.getAllWhitePieces() : board.getAllBlackPieces();
@@ -41,111 +47,62 @@ public final class MoveGen {
             int sq = Long.numberOfTrailingZeros(bb);
             bb &= bb - 1;
 
-            Piece curPiece = board.getPieceAtSquare(sq);
-            if (curPiece == null) continue;
-            if (curPiece.isWhite() != whiteToMove) continue;
+            Piece piece = board.getPieceAtSquare(sq);
+            if (piece == null) continue;
+            if (piece.isWhite() != whiteToMove) continue;
 
-            generateInto(board, sq, curPiece, masks, includeCastling, false, out);
+            count = generateInto(board, sq, piece, masks, includeCastling, false, out, count);
+
+            // If you ever overflow here, your out[] is too small.
+            // MAX_MOVES=256 should be safe for pseudo-legal.
+            if (count >= out.length) return out.length;
         }
 
-        return out;
+        return count;
     }
 
-    // ---------------------------
-    // Flat LEGAL moves (filters by making/unmaking)
-    // ---------------------------
-    public static MoveBuffer generateLegalMovesFlat(Board board, Masks masks) {
-        MoveBuffer pseudo = generatePseudoLegalMovesFlat(board, masks, true);
-        MoveBuffer legal = new MoveBuffer(pseudo.size == 0 ? 1 : pseudo.size);
+    // ------------------------------------------------------------
+    // Flat LEGAL generation: filters pseudo by make/unmake
+    // Writes legal moves into `out`, returns count
+    // Uses a local temp array to hold pseudo moves.
+    // ------------------------------------------------------------
+    public static int generateLegalMovesFlat(Board board, Masks masks, int[] out) {
+        // temp pseudo buffer
+        int[] pseudo = new int[MAX_MOVES];
+        int pseudoCount = generatePseudoLegalMovesFlat(board, masks, true, pseudo);
 
+        int count = 0;
         boolean whiteToMove = board.getTurnCounter();
 
-        for (int i = 0; i < pseudo.size; i++) {
-            Move m = pseudo.moves[i];
+        for (int i = 0; i < pseudoCount; i++) {
+            int m = pseudo[i];
 
             // Never allow “capturing” a king
-            if (m.capture == Piece.WK || m.capture == Piece.BK) continue;
-            if (m.piece.isWhite() != whiteToMove) continue;
+            int capId = Move.capId(m);
+            if (capId == Piece.WK.ordinal() + 1 || capId == Piece.BK.ordinal() + 1) continue;
+
+            // Sanity: only accept side-to-move pieces
+            Piece mover = Move.piece(m);
+            if (mover == null || mover.isWhite() != whiteToMove) continue;
 
             board.makeMoveInternal(m);
             boolean kingSafe = whiteToMove ? !board.whiteInCheck : !board.blackInCheck;
             board.unmakeMoveInternal(m);
 
-            if (kingSafe) legal.add(m);
-        }
-
-        return legal;
-    }
-
-    // ---------------------------
-    // If you still want the old map form (fromSq -> MoveList),
-    // you can build it from a flat buffer (still avoids per-piece lists).
-    // ---------------------------
-    public static HashMap<Integer, MoveList> generatePseudoLegalMoves(Board board, Masks masks, boolean includeCastling) {
-        HashMap<Integer, MoveList> allMoves = new HashMap<>();
-
-        boolean whiteToMove = board.getTurnCounter();
-        long bb = whiteToMove ? board.getAllWhitePieces() : board.getAllBlackPieces();
-
-        // Reuse a buffer per piece to avoid allocating MoveList during generation
-        MoveBuffer tmp = new MoveBuffer(MAX_MOVES);
-
-        while (bb != 0) {
-            int sq = Long.numberOfTrailingZeros(bb);
-            bb &= bb - 1;
-
-            Piece curPiece = board.getPieceAtSquare(sq);
-            if (curPiece == null) continue;
-            if (curPiece.isWhite() != whiteToMove) continue;
-
-            tmp.clear();
-            generateInto(board, sq, curPiece, masks, includeCastling, false, tmp);
-
-            if (tmp.size > 0) {
-                MoveList list = new MoveList();
-                for (int i = 0; i < tmp.size; i++) list.add(tmp.moves[i]);
-                allMoves.put(sq, list);
+            if (kingSafe) {
+                if (count < out.length) out[count++] = m;
+                else return out.length;
             }
         }
 
-        return allMoves;
+        return count;
     }
 
-    public static HashMap<Integer, MoveList> generateLegalMoves(Board board, Masks masks) {
-        HashMap<Integer, MoveList> pseudo = generatePseudoLegalMoves(board, masks, true);
-        HashMap<Integer, MoveList> legal  = new HashMap<>();
+    // ------------------------------------------------------------
+    // Piece generators (append encoded int moves)
+    // ------------------------------------------------------------
 
-        boolean whiteToMove = board.getTurnCounter();
-
-        for (var entry : pseudo.entrySet()) {
-            int fromSq = entry.getKey();
-            MoveList srcList = entry.getValue();
-            MoveList dstList = new MoveList();
-
-            for (Move move : srcList) {
-                if (move.capture == Piece.WK || move.capture == Piece.BK) continue;
-                if (move.piece.isWhite() != whiteToMove) continue;
-
-                board.makeMoveInternal(move);
-                boolean kingSafe = whiteToMove ? !board.whiteInCheck : !board.blackInCheck;
-                board.unmakeMoveInternal(move);
-
-                if (kingSafe) dstList.add(move);
-            }
-
-            if (!dstList.isEmpty()) {
-                legal.put(fromSq, dstList);
-            }
-        }
-
-        return legal;
-    }
-
-    // ---------------------------
-    // Piece generators (append into MoveBuffer)
-    // ---------------------------
-
-    private static void genKnights(Board board, int from, boolean isWhite, Masks masks, MoveBuffer out) {
+    private static int genKnights(Board board, int from, boolean isWhite, Masks masks, int[] out, int count) {
         long own   = isWhite ? board.getAllWhitePieces() : board.getAllBlackPieces();
         long enemy = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();
 
@@ -157,11 +114,18 @@ public final class MoveGen {
             targets &= targets - 1;
 
             Piece captured = (((enemy >>> to) & 1L) != 0) ? board.getPieceAtSquare(to) : null;
-            out.add(new Move(from, to, mover, captured, null, 0));
+
+            if (count < out.length) {
+                out[count++] = Move.pack(from, to, mover, captured, null, Move.FLAG_NORMAL);
+            } else {
+                return out.length;
+            }
         }
+
+        return count;
     }
 
-    private static void genKings(Board board, int from, boolean isWhite, Masks masks, boolean includeCastling, MoveBuffer out) {
+    private static int genKings(Board board, int from, boolean isWhite, Masks masks, boolean includeCastling, int[] out, int count) {
         long own   = isWhite ? board.getAllWhitePieces() : board.getAllBlackPieces();
         long enemy = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();
 
@@ -169,7 +133,8 @@ public final class MoveGen {
         Piece mover  = isWhite ? Piece.WK : Piece.BK;
 
         if (includeCastling) {
-            kingCastling(board, from, isWhite, out);
+            count = kingCastling(board, from, isWhite, out, count);
+            if (count >= out.length) return out.length;
         }
 
         while (targets != 0) {
@@ -177,16 +142,23 @@ public final class MoveGen {
             targets &= targets - 1;
 
             Piece captured = (((enemy >>> to) & 1L) != 0) ? board.getPieceAtSquare(to) : null;
-            out.add(new Move(from, to, mover, captured, null, 0));
+
+            if (count < out.length) {
+                out[count++] = Move.pack(from, to, mover, captured, null, Move.FLAG_NORMAL);
+            } else {
+                return out.length;
+            }
         }
+
+        return count;
     }
 
-    private static void kingCastling(Board board, int curSquare, boolean isWhite, MoveBuffer out) {
+    private static int kingCastling(Board board, int curSquare, boolean isWhite, int[] out, int count) {
         long occupied   = board.getAllPieces();
         long attackMask = board.getAttackMask(!isWhite); // attacked by opponent
 
         if (isWhite) {
-            if (board.whiteKingHasMoved || curSquare != 4) return;
+            if (board.whiteKingHasMoved || curSquare != 4) return count;
 
             // King-side (e1->g1)
             if (!board.whiteKingRookHasMoved && board.getPieceAtSquare(7) == Piece.WR) {
@@ -198,7 +170,8 @@ public final class MoveGen {
                 boolean safeG1 = (attackMask & (1L << 6)) == 0;
 
                 if (emptyF1 && emptyG1 && safeE1 && safeF1 && safeG1) {
-                    out.add(new Move(4, 6, Piece.WK, null, null, 3));
+                    if (count < out.length) out[count++] = Move.pack(4, 6, Piece.WK, null, null, Move.FLAG_CASTLE_KS);
+                    else return out.length;
                 }
             }
 
@@ -213,11 +186,12 @@ public final class MoveGen {
                 boolean safeC1 = (attackMask & (1L << 2)) == 0;
 
                 if (emptyB1 && emptyC1 && emptyD1 && safeE1 && safeD1 && safeC1) {
-                    out.add(new Move(4, 2, Piece.WK, null, null, 2));
+                    if (count < out.length) out[count++] = Move.pack(4, 2, Piece.WK, null, null, Move.FLAG_CASTLE_QS);
+                    else return out.length;
                 }
             }
         } else {
-            if (board.blackKingHasMoved || curSquare != 60) return;
+            if (board.blackKingHasMoved || curSquare != 60) return count;
 
             // King-side (e8->g8)
             if (!board.blackKingRookHasMoved && board.getPieceAtSquare(63) == Piece.BR) {
@@ -229,7 +203,8 @@ public final class MoveGen {
                 boolean safeG8 = (attackMask & (1L << 62)) == 0;
 
                 if (emptyF8 && emptyG8 && safeE8 && safeF8 && safeG8) {
-                    out.add(new Move(60, 62, Piece.BK, null, null, 3));
+                    if (count < out.length) out[count++] = Move.pack(60, 62, Piece.BK, null, null, Move.FLAG_CASTLE_KS);
+                    else return out.length;
                 }
             }
 
@@ -244,13 +219,16 @@ public final class MoveGen {
                 boolean safeC8 = (attackMask & (1L << 58)) == 0;
 
                 if (emptyB8 && emptyC8 && emptyD8 && safeE8 && safeD8 && safeC8) {
-                    out.add(new Move(60, 58, Piece.BK, null, null, 2));
+                    if (count < out.length) out[count++] = Move.pack(60, 58, Piece.BK, null, null, Move.FLAG_CASTLE_QS);
+                    else return out.length;
                 }
             }
         }
+
+        return count;
     }
 
-    private static void genPawns(Board board, int from, boolean isWhite, boolean pawnAttackMask, MoveBuffer out) {
+    private static int genPawns(Board board, int from, boolean isWhite, boolean pawnAttackMask, int[] out, int count) {
         int rank = from / 8;
         int file = from % 8;
 
@@ -269,23 +247,35 @@ public final class MoveGen {
             if (isWhite) {
                 if (file > 0) {
                     int to = from + 7;
-                    if (to >= 0 && to < 64) out.add(new Move(from, to, mover, null, null, 0));
+                    if (to >= 0 && to < 64) {
+                        if (count < out.length) out[count++] = Move.pack(from, to, mover, null, null, Move.FLAG_NORMAL);
+                        else return out.length;
+                    }
                 }
                 if (file < 7) {
                     int to = from + 9;
-                    if (to >= 0 && to < 64) out.add(new Move(from, to, mover, null, null, 0));
+                    if (to >= 0 && to < 64) {
+                        if (count < out.length) out[count++] = Move.pack(from, to, mover, null, null, Move.FLAG_NORMAL);
+                        else return out.length;
+                    }
                 }
             } else {
                 if (file > 0) {
                     int to = from - 9;
-                    if (to >= 0 && to < 64) out.add(new Move(from, to, mover, null, null, 0));
+                    if (to >= 0 && to < 64) {
+                        if (count < out.length) out[count++] = Move.pack(from, to, mover, null, null, Move.FLAG_NORMAL);
+                        else return out.length;
+                    }
                 }
                 if (file < 7) {
                     int to = from - 7;
-                    if (to >= 0 && to < 64) out.add(new Move(from, to, mover, null, null, 0));
+                    if (to >= 0 && to < 64) {
+                        if (count < out.length) out[count++] = Move.pack(from, to, mover, null, null, Move.FLAG_NORMAL);
+                        else return out.length;
+                    }
                 }
             }
-            return;
+            return count;
         }
 
         // -------------------------
@@ -296,9 +286,11 @@ public final class MoveGen {
         int fwd = from + 8 * dir;
         if (fwd >= 0 && fwd < 64 && ((occupied >>> fwd) & 1L) == 0) {
             if (promotionRank) {
-                addPawnPromotions(from, fwd, mover, null, 1, out);
+                count = addPawnPromotions(from, fwd, mover, null, Move.FLAG_PAWN_PUSH, out, count);
+                if (count >= out.length) return out.length;
             } else {
-                out.add(new Move(from, fwd, mover, null, null, 1));
+                if (count < out.length) out[count++] = Move.pack(from, fwd, mover, null, null, Move.FLAG_PAWN_PUSH);
+                else return out.length;
             }
 
             // Two steps forward (only if one step was clear)
@@ -306,7 +298,8 @@ public final class MoveGen {
             if (onStartRank) {
                 int fwd2 = from + 16 * dir;
                 if (fwd2 >= 0 && fwd2 < 64 && ((occupied >>> fwd2) & 1L) == 0) {
-                    out.add(new Move(from, fwd2, mover, null, null, 1));
+                    if (count < out.length) out[count++] = Move.pack(from, fwd2, mover, null, null, Move.FLAG_PAWN_PUSH);
+                    else return out.length;
                 }
             }
         }
@@ -318,8 +311,13 @@ public final class MoveGen {
                 int to = from + 7;
                 if (to >= 0 && to < 64 && ((enemyBB >>> to) & 1L) != 0) {
                     Piece cap = board.getPieceAtSquare(to);
-                    if (promotionRank) addPawnPromotions(from, to, mover, cap, 0, out);
-                    else out.add(new Move(from, to, mover, cap, null, 0));
+                    if (promotionRank) {
+                        count = addPawnPromotions(from, to, mover, cap, Move.FLAG_NORMAL, out, count);
+                        if (count >= out.length) return out.length;
+                    } else {
+                        if (count < out.length) out[count++] = Move.pack(from, to, mover, cap, null, Move.FLAG_NORMAL);
+                        else return out.length;
+                    }
                 }
             }
             // NE: +9
@@ -327,8 +325,13 @@ public final class MoveGen {
                 int to = from + 9;
                 if (to >= 0 && to < 64 && ((enemyBB >>> to) & 1L) != 0) {
                     Piece cap = board.getPieceAtSquare(to);
-                    if (promotionRank) addPawnPromotions(from, to, mover, cap, 0, out);
-                    else out.add(new Move(from, to, mover, cap, null, 0));
+                    if (promotionRank) {
+                        count = addPawnPromotions(from, to, mover, cap, Move.FLAG_NORMAL, out, count);
+                        if (count >= out.length) return out.length;
+                    } else {
+                        if (count < out.length) out[count++] = Move.pack(from, to, mover, cap, null, Move.FLAG_NORMAL);
+                        else return out.length;
+                    }
                 }
             }
         } else {
@@ -337,8 +340,13 @@ public final class MoveGen {
                 int to = from - 9;
                 if (to >= 0 && to < 64 && ((enemyBB >>> to) & 1L) != 0) {
                     Piece cap = board.getPieceAtSquare(to);
-                    if (promotionRank) addPawnPromotions(from, to, mover, cap, 0, out);
-                    else out.add(new Move(from, to, mover, cap, null, 0));
+                    if (promotionRank) {
+                        count = addPawnPromotions(from, to, mover, cap, Move.FLAG_NORMAL, out, count);
+                        if (count >= out.length) return out.length;
+                    } else {
+                        if (count < out.length) out[count++] = Move.pack(from, to, mover, cap, null, Move.FLAG_NORMAL);
+                        else return out.length;
+                    }
                 }
             }
             // SE: -7
@@ -346,8 +354,13 @@ public final class MoveGen {
                 int to = from - 7;
                 if (to >= 0 && to < 64 && ((enemyBB >>> to) & 1L) != 0) {
                     Piece cap = board.getPieceAtSquare(to);
-                    if (promotionRank) addPawnPromotions(from, to, mover, cap, 0, out);
-                    else out.add(new Move(from, to, mover, cap, null, 0));
+                    if (promotionRank) {
+                        count = addPawnPromotions(from, to, mover, cap, Move.FLAG_NORMAL, out, count);
+                        if (count >= out.length) return out.length;
+                    } else {
+                        if (count < out.length) out[count++] = Move.pack(from, to, mover, cap, null, Move.FLAG_NORMAL);
+                        else return out.length;
+                    }
                 }
             }
         }
@@ -356,27 +369,45 @@ public final class MoveGen {
         int ep = board.getEnPassantSquare();
         if (ep != -1) {
             if (isWhite) {
-                if (file > 0 && from + 7 == ep) out.add(new Move(from, ep, mover, null, null, 4));
-                if (file < 7 && from + 9 == ep) out.add(new Move(from, ep, mover, null, null, 4));
+                if (file > 0 && from + 7 == ep) {
+                    if (count < out.length) out[count++] = Move.pack(from, ep, mover, null, null, Move.FLAG_EN_PASSANT);
+                    else return out.length;
+                }
+                if (file < 7 && from + 9 == ep) {
+                    if (count < out.length) out[count++] = Move.pack(from, ep, mover, null, null, Move.FLAG_EN_PASSANT);
+                    else return out.length;
+                }
             } else {
-                if (file > 0 && from - 9 == ep) out.add(new Move(from, ep, mover, null, null, 4));
-                if (file < 7 && from - 7 == ep) out.add(new Move(from, ep, mover, null, null, 4));
+                if (file > 0 && from - 9 == ep) {
+                    if (count < out.length) out[count++] = Move.pack(from, ep, mover, null, null, Move.FLAG_EN_PASSANT);
+                    else return out.length;
+                }
+                if (file < 7 && from - 7 == ep) {
+                    if (count < out.length) out[count++] = Move.pack(from, ep, mover, null, null, Move.FLAG_EN_PASSANT);
+                    else return out.length;
+                }
             }
         }
+
+        return count;
     }
 
-
-    private static void addPawnPromotions(int from, int to, Piece pawn, Piece capture, int flags, MoveBuffer out) {
+    private static int addPawnPromotions(int from, int to, Piece pawn, Piece capture, int flags, int[] out, int count) {
         Piece[] promos = pawn.isWhite()
                 ? new Piece[]{Piece.WQ, Piece.WR, Piece.WB, Piece.WN}
                 : new Piece[]{Piece.BQ, Piece.BR, Piece.BB, Piece.BN};
 
         for (Piece promo : promos) {
-            out.add(new Move(from, to, pawn, capture, promo, flags));
+            if (count < out.length) {
+                out[count++] = Move.pack(from, to, pawn, capture, promo, flags);
+            } else {
+                return out.length;
+            }
         }
+        return count;
     }
 
-    private static void genBishops(Board board, int from, boolean isWhite, Masks masks, MoveBuffer out) {
+    private static int genBishops(Board board, int from, boolean isWhite, Masks masks, int[] out, int count) {
         long own   = isWhite ? board.getAllWhitePieces() : board.getAllBlackPieces();
         long enemy = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();
         long occ   = board.getAllPieces();
@@ -392,11 +423,18 @@ public final class MoveGen {
             targets &= targets - 1;
 
             Piece captured = (((enemy >>> to) & 1L) != 0) ? board.getPieceAtSquare(to) : null;
-            out.add(new Move(from, to, mover, captured, null, 0));
+
+            if (count < out.length) {
+                out[count++] = Move.pack(from, to, mover, captured, null, Move.FLAG_NORMAL);
+            } else {
+                return out.length;
+            }
         }
+
+        return count;
     }
 
-    private static void genRooks(Board board, int from, boolean isWhite, Masks masks, MoveBuffer out) {
+    private static int genRooks(Board board, int from, boolean isWhite, Masks masks, int[] out, int count) {
         long own   = isWhite ? board.getAllWhitePieces() : board.getAllBlackPieces();
         long enemy = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();
         long occ   = board.getAllPieces();
@@ -412,11 +450,18 @@ public final class MoveGen {
             targets &= targets - 1;
 
             Piece captured = (((enemy >>> to) & 1L) != 0) ? board.getPieceAtSquare(to) : null;
-            out.add(new Move(from, to, mover, captured, null, 0));
+
+            if (count < out.length) {
+                out[count++] = Move.pack(from, to, mover, captured, null, Move.FLAG_NORMAL);
+            } else {
+                return out.length;
+            }
         }
+
+        return count;
     }
 
-    private static void genQueens(Board board, int from, boolean isWhite, Masks masks, MoveBuffer out) {
+    private static int genQueens(Board board, int from, boolean isWhite, Masks masks, int[] out, int count) {
         long own   = isWhite ? board.getAllWhitePieces() : board.getAllBlackPieces();
         long enemy = isWhite ? board.getAllBlackPieces() : board.getAllWhitePieces();
         long occ   = board.getAllPieces();
@@ -435,7 +480,14 @@ public final class MoveGen {
             targets &= targets - 1;
 
             Piece captured = (((enemy >>> to) & 1L) != 0) ? board.getPieceAtSquare(to) : null;
-            out.add(new Move(from, to, mover, captured, null, 0));
+
+            if (count < out.length) {
+                out[count++] = Move.pack(from, to, mover, captured, null, Move.FLAG_NORMAL);
+            } else {
+                return out.length;
+            }
         }
+
+        return count;
     }
 }
