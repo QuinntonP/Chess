@@ -154,8 +154,7 @@ public final class MoveGen {
     }
 
     private static int kingCastling(Board board, int curSquare, boolean isWhite, int[] out, int count) {
-        long occupied   = board.getAllPieces();
-        long attackMask = board.getAttackMask(!isWhite); // attacked by opponent
+        long occupied = board.getAllPieces();
 
         if (isWhite) {
             if (board.whiteKingHasMoved || curSquare != 4) return count;
@@ -165,12 +164,14 @@ public final class MoveGen {
                 boolean emptyF1 = (occupied & (1L << 5)) == 0;
                 boolean emptyG1 = (occupied & (1L << 6)) == 0;
 
-                boolean safeE1 = (attackMask & (1L << 4)) == 0;
-                boolean safeF1 = (attackMask & (1L << 5)) == 0;
-                boolean safeG1 = (attackMask & (1L << 6)) == 0;
+                // isWhite=true => attacked by BLACK
+                boolean safeE1 = !board.isSquareAttacked(4, true);
+                boolean safeF1 = !board.isSquareAttacked(5, true);
+                boolean safeG1 = !board.isSquareAttacked(6, true);
 
                 if (emptyF1 && emptyG1 && safeE1 && safeF1 && safeG1) {
-                    if (count < out.length) out[count++] = Move.pack(4, 6, Piece.WK, null, null, Move.FLAG_CASTLE_KS);
+                    if (count < out.length) out[count++] =
+                            Move.pack(4, 6, Piece.WK, null, null, Move.FLAG_CASTLE_KS);
                     else return out.length;
                 }
             }
@@ -181,15 +182,17 @@ public final class MoveGen {
                 boolean emptyC1 = (occupied & (1L << 2)) == 0;
                 boolean emptyD1 = (occupied & (1L << 3)) == 0;
 
-                boolean safeE1 = (attackMask & (1L << 4)) == 0;
-                boolean safeD1 = (attackMask & (1L << 3)) == 0;
-                boolean safeC1 = (attackMask & (1L << 2)) == 0;
+                boolean safeE1 = !board.isSquareAttacked(4, true);
+                boolean safeD1 = !board.isSquareAttacked(3, true);
+                boolean safeC1 = !board.isSquareAttacked(2, true);
 
                 if (emptyB1 && emptyC1 && emptyD1 && safeE1 && safeD1 && safeC1) {
-                    if (count < out.length) out[count++] = Move.pack(4, 2, Piece.WK, null, null, Move.FLAG_CASTLE_QS);
+                    if (count < out.length) out[count++] =
+                            Move.pack(4, 2, Piece.WK, null, null, Move.FLAG_CASTLE_QS);
                     else return out.length;
                 }
             }
+
         } else {
             if (board.blackKingHasMoved || curSquare != 60) return count;
 
@@ -198,12 +201,14 @@ public final class MoveGen {
                 boolean emptyF8 = (occupied & (1L << 61)) == 0;
                 boolean emptyG8 = (occupied & (1L << 62)) == 0;
 
-                boolean safeE8 = (attackMask & (1L << 60)) == 0;
-                boolean safeF8 = (attackMask & (1L << 61)) == 0;
-                boolean safeG8 = (attackMask & (1L << 62)) == 0;
+                // isWhite=false => attacked by WHITE
+                boolean safeE8 = !board.isSquareAttacked(60, false);
+                boolean safeF8 = !board.isSquareAttacked(61, false);
+                boolean safeG8 = !board.isSquareAttacked(62, false);
 
                 if (emptyF8 && emptyG8 && safeE8 && safeF8 && safeG8) {
-                    if (count < out.length) out[count++] = Move.pack(60, 62, Piece.BK, null, null, Move.FLAG_CASTLE_KS);
+                    if (count < out.length) out[count++] =
+                            Move.pack(60, 62, Piece.BK, null, null, Move.FLAG_CASTLE_KS);
                     else return out.length;
                 }
             }
@@ -214,12 +219,13 @@ public final class MoveGen {
                 boolean emptyC8 = (occupied & (1L << 58)) == 0;
                 boolean emptyD8 = (occupied & (1L << 59)) == 0;
 
-                boolean safeE8 = (attackMask & (1L << 60)) == 0;
-                boolean safeD8 = (attackMask & (1L << 59)) == 0;
-                boolean safeC8 = (attackMask & (1L << 58)) == 0;
+                boolean safeE8 = !board.isSquareAttacked(60, false);
+                boolean safeD8 = !board.isSquareAttacked(59, false);
+                boolean safeC8 = !board.isSquareAttacked(58, false);
 
                 if (emptyB8 && emptyC8 && emptyD8 && safeE8 && safeD8 && safeC8) {
-                    if (count < out.length) out[count++] = Move.pack(60, 58, Piece.BK, null, null, Move.FLAG_CASTLE_QS);
+                    if (count < out.length) out[count++] =
+                            Move.pack(60, 58, Piece.BK, null, null, Move.FLAG_CASTLE_QS);
                     else return out.length;
                 }
             }
@@ -227,6 +233,7 @@ public final class MoveGen {
 
         return count;
     }
+
 
     private static int genPawns(Board board, int from, boolean isWhite, boolean pawnAttackMask, int[] out, int count) {
         int rank = from / 8;

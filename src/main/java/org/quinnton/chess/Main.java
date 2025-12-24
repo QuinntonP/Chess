@@ -40,8 +40,9 @@ public class Main extends Application {
                         20L,
                         400L,
                         8902L,
-                        197281L,
-                        4865609L
+//                        197281L,
+//                        4865609L,
+//                        119060324L
                 }
         );
 
@@ -78,7 +79,14 @@ public class Main extends Application {
             public void handle(long now) {
                 if (last == 0) { last = now; return; }
                 last = now;
-                view.setDebugBitboard(Masks.ROOK_MOVE_MASK);
+
+                long b = 1L << 60;
+
+                long attacks =
+                        ((b & Masks.NOT_FILE_H) >>> 7) |   // attacker from sq-7
+                                ((b & Masks.NOT_FILE_A) >>> 9);    // attacker from sq-9
+
+                view.setDebugBitboard(attacks);
                 view.draw();
             }
         }.start();

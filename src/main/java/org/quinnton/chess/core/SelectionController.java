@@ -34,7 +34,7 @@ public class SelectionController {
 
         new Thread(() -> {
             Board searchBoard = board.copy();
-            int best = bot.findBestMove(searchBoard, 4); // now returns encoded int
+            int best = bot.findBestMove(searchBoard, 5); // now returns encoded int
             if (best == 0) return;
 
             javafx.application.Platform.runLater(() -> {

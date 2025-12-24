@@ -209,7 +209,7 @@ public class Board {
             enPassantSquare = epRank * 8 + epFile;
         }
 
-        updateKingSquares();
+        setKingSquares();
         lookForChecks();
 
         // initial legal moves
@@ -309,8 +309,16 @@ public class Board {
         @SuppressWarnings("unused")
         int _unusedPrevEp = prevEp;
 
-        updateKingSquares();
+        if (mover == Piece.WK){
+            whiteKingSquare = to;
+        }
+        if (mover == Piece.BK){
+            blackKingSquare = to;
+        }
+
         lookForChecks();
+
+        System.out.println("Checking whiteking square" + whiteKingSquare);
     }
 
     public void setLastMove(int m) {
@@ -386,9 +394,7 @@ public class Board {
         legalMoveCount = MoveGen.generateLegalMovesFlat(this, masks, legalMoves);
     }
 
-    // ------------------------------------------------------------
-    // Attack mask / check logic
-    // ------------------------------------------------------------
+
     public long getAttackMask(boolean byWhite) {
         long mask = 0L;
 
@@ -417,16 +423,140 @@ public class Board {
         return mask;
     }
 
+//    private void lookForChecks() {
+//        long whiteAttackMask = getAttackMask(true);
+//        long blackAttackMask = getAttackMask(false);
+//
+//        long whiteKingMask = bitBoards[Piece.WK.ordinal()];
+//        long blackKingMask = bitBoards[Piece.BK.ordinal()];
+//
+//        whiteInCheck = (whiteKingMask & blackAttackMask) != 0;
+//        blackInCheck = (blackKingMask & whiteAttackMask) != 0;
+//    }
+
     private void lookForChecks() {
-        long whiteAttackMask = getAttackMask(true);
-        long blackAttackMask = getAttackMask(false);
-
-        long whiteKingMask = bitBoards[Piece.WK.ordinal()];
-        long blackKingMask = bitBoards[Piece.BK.ordinal()];
-
-        whiteInCheck = (whiteKingMask & blackAttackMask) != 0;
-        blackInCheck = (blackKingMask & whiteAttackMask) != 0;
+        whiteInCheck = isSquareAttacked(whiteKingSquare, true);
+        blackInCheck = isSquareAttacked(blackKingSquare, false);
     }
+
+    // test
+    private boolean getKingInCheck(boolean isWhite){
+        if (isWhite){
+            return whiteInCheck;
+        }
+        else{
+            return blackInCheck;
+        }
+    }
+
+    /**
+     * Checks attack masks of all pieces on the opposing side to see if they are attacking that square
+     * @param sq the square being attacked
+     * @param isWhite if you want to check for white or black
+     * @return true means it is being attacked false means it is not
+     */
+    public boolean isSquareAttacked(int sq, boolean isWhite){
+        long occ = getAllPieces();
+
+        long b = 1L << sq;
+
+        // Black and White Pawns
+        if (isWhite) {
+            long pawns = getBitboard(Piece.BP);
+
+            long attacks =
+                    ((b & Masks.NOT_FILE_H) << 7) |   // attacker from sq-7
+                            ((b & Masks.NOT_FILE_A) << 9);    // attacker from sq-9
+
+            if ((attacks & pawns) != 0) {
+//                System.out.println("In check from black pawn");
+                return true;
+            }
+        } else { // is black king in check? -> attacked by WHITE pawns
+            long pawns = getBitboard(Piece.WP);
+
+            long attacks =
+                    ((b & Masks.NOT_FILE_A) >>> 7) |    // attacker from sq+7
+                            ((b & Masks.NOT_FILE_H) >>> 9);     // attacker from sq+9
+
+            if ((attacks & pawns) != 0) return true;
+        }
+
+
+        if (isWhite){
+            // Knight
+            long knightAttacks = Masks.knightMoves.get(sq);
+            if ((knightAttacks & getBitboard(Piece.BN)) != 0){
+//                System.out.println("In check from Knight");
+                return true;
+            }
+
+            // Kings
+            long kingAttacks = Masks.kingMoves.get(sq);
+            if ((kingAttacks & getBitboard(Piece.BK)) != 0){
+//                System.out.println("In check from Black king");
+                return true;
+            }
+
+            // Bishop and Queen diag
+            long bSubset = occ & BishopMoveMasks.bishopBlockerMask(sq);
+            long bishopAttacks = masks.getBishopMoves(sq, bSubset);
+
+            if ((bishopAttacks & getBitboard(Piece.BB)) != 0 || (bishopAttacks & getBitboard(Piece.BQ)) != 0){
+//                System.out.println("In check from Queen or bishop diag");
+                return true;
+            }
+
+            // Rook and Queen straight
+            long rSubset = occ & RookMoveMasks.rookBlockerMask(sq);
+            long rookAttacks = masks.getRookMoves(sq, rSubset);
+
+            if ((rookAttacks & getBitboard(Piece.BR)) != 0 || (rookAttacks & getBitboard(Piece.BQ)) != 0){
+//                System.out.println("In check from Rook or Queen straight");
+                return true;
+            }
+        }
+        else{
+            // Knight
+            long knightAttacks = Masks.knightMoves.get(sq);
+            if ((knightAttacks & getBitboard(Piece.WN)) != 0) {
+//                System.out.println("In check from Knight");
+                return true;
+            }
+
+            // King
+            long kingAttacks = Masks.kingMoves.get(sq);
+            if ((kingAttacks & getBitboard(Piece.WK)) != 0) {
+//                System.out.println("In check from White king");
+                return true;
+            }
+
+            // Bishop and Queen (diagonals)
+            long bSubset = occ & BishopMoveMasks.bishopBlockerMask(sq);
+            long bishopAttacks = masks.getBishopMoves(sq, bSubset);
+
+            if ((bishopAttacks & getBitboard(Piece.WB)) != 0 ||
+                    (bishopAttacks & getBitboard(Piece.WQ)) != 0) {
+//                System.out.println("In check from Queen or bishop diag");
+                return true;
+            }
+
+            // Rook and Queen (ranks/files)
+            long rSubset = occ & RookMoveMasks.rookBlockerMask(sq);
+            long rookAttacks = masks.getRookMoves(sq, rSubset);
+
+            if ((rookAttacks & getBitboard(Piece.WR)) != 0 ||
+                    (rookAttacks & getBitboard(Piece.WQ)) != 0) {
+//                System.out.println("In check from Rook or Queen straight");
+                return true;
+            }
+        }
+
+
+
+        return false;
+    }
+
 
     public void lookForCheckmate() {
         if (gameOver) return;
@@ -438,12 +568,14 @@ public class Board {
         if (blackInCheck && noLegalMoves) System.out.println("Checkmate White wins");
     }
 
-    private void updateKingSquares() {
+
+    private void setKingSquares() {
         long wk = bitBoards[Piece.WK.ordinal()];
         long bk = bitBoards[Piece.BK.ordinal()];
         whiteKingSquare = (wk != 0) ? Long.numberOfTrailingZeros(wk) : -1;
         blackKingSquare = (bk != 0) ? Long.numberOfTrailingZeros(bk) : -1;
     }
+
 
     private void checkCastlingPieces(int square) {
         switch (square) {
@@ -544,7 +676,14 @@ public class Board {
         // update castling rights if king/rook moved
         checkCastlingPieces(from);
 
-        updateKingSquares();
+        if (mover == Piece.WK){
+            whiteKingSquare = to;
+        }
+
+        if (mover == Piece.BK){
+            blackKingSquare = to;
+        }
+
         lookForChecks();
 
         turnCounter++;
@@ -624,7 +763,14 @@ public class Board {
         enPassantSquare = prevEp;
         unpackCastleFlags(prevCastle);
 
-        updateKingSquares();
+        if (mover == Piece.WK){
+            whiteKingSquare = from;
+        }
+
+        if (mover == Piece.BK){
+            blackKingSquare = from;
+        }
+
         lookForChecks();
     }
 

@@ -18,9 +18,9 @@ Move generation testing - Done-ish (continue testing when you add magics)
 
 
 Chess Bot :
-    Evaluate function
-    Min max algorithm
-    Make moves
+    Evaluate function - Done
+    Min max algorithm - Done
+    Make moves - Done
     Program in openings
 
 
@@ -30,3 +30,4 @@ Improvements
     Queen magics using the two above.
     Sounds - Done
     Piece Dragging
+    Move-bit encoding - Done
