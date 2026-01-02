@@ -1,0 +1,33 @@
+Knight Movement - Done
+King Movement - Done
+Rook Movement - Done kinda ( magics are not done )
+Bishop Movement - Done kinda ( magics are  not done )
+Queen Movement - Done kinda ( moves are based off of rooks and bishops so obviously no magics )
+Pawn Movement - Done
+Generate all moves on each turn - Done
+Get attacking mask - Done
+Move Flags - Done
+Castling - Done
+Checking - Done
+Can't move a piece if it puts in check - Done
+Checkmate - Done
+Turns - Done
+Promotions - Done
+Enpassant - Done
+Move generation testing - Done-ish (continue testing when you add magics)
+
+
+Chess Bot :
+    Evaluate function - Done
+    Min max algorithm - Done
+    Make moves - Done
+    Program in openings
+
+
+Improvements
+    Rook magics
+    Bishop magics
+    Queen magics using the two above.
+    Sounds - Done
+    Piece Dragging
+    Move-bit encoding - Done
