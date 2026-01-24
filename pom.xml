@@ -26,12 +26,14 @@
             <version>${javafx.version}</version>
             <classifier>${javafx.platform}</classifier>
         </dependency>
+
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-graphics</artifactId>
             <version>${javafx.version}</version>
             <classifier>${javafx.platform}</classifier>
         </dependency>
+
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-fxml</artifactId>
@@ -103,7 +105,7 @@
             <id>linux-x86_64</id>
             <activation>
                 <os>
-                    <family>unix</family>
+                    <name>Linux</name>
                     <arch>x86_64</arch>
                 </os>
             </activation>
@@ -117,7 +119,7 @@
             <id>linux-aarch64</id>
             <activation>
                 <os>
-                    <family>unix</family>
+                    <name>Linux</name>
                     <arch>aarch64</arch>
                 </os>
             </activation>
