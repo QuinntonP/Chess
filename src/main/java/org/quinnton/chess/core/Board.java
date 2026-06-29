@@ -106,6 +106,21 @@ public class Board {
         return legalMoveCount;
     }
 
+    public boolean isGameOver() {
+        return gameOver;
+    }
+
+    public boolean isStalemate() {
+        return stalemate;
+    }
+
+    /**
+     * @return TRUE if white won, FALSE if black won, null if no winner yet or draw.
+     */
+    public Boolean getWinnerIsWhite() {
+        return winnerIsWhite;
+    }
+
     // ------------------------------------------------------------
     // FEN
     // ------------------------------------------------------------
@@ -560,12 +575,27 @@ public class Board {
 
     public void lookForCheckmate() {
         if (gameOver) return;
-        if (!whiteInCheck && !blackInCheck) return;
+        if (legalMoveCount != 0) return; // side to move still has moves
 
-        boolean noLegalMoves = (legalMoveCount == 0);
-
-        if (whiteInCheck && noLegalMoves) System.out.println("Checkmate Black wins");
-        if (blackInCheck && noLegalMoves) System.out.println("Checkmate White wins");
+        if (whiteInCheck) {
+            // white is to move, in check, no legal moves -> black wins
+            gameOver = true;
+            stalemate = false;
+            winnerIsWhite = Boolean.FALSE;
+            System.out.println("Checkmate Black wins");
+        } else if (blackInCheck) {
+            // black is to move, in check, no legal moves -> white wins
+            gameOver = true;
+            stalemate = false;
+            winnerIsWhite = Boolean.TRUE;
+            System.out.println("Checkmate White wins");
+        } else {
+            // no legal moves and not in check -> stalemate (draw)
+            gameOver = true;
+            stalemate = true;
+            winnerIsWhite = null;
+            System.out.println("Stalemate");
+        }
     }
 
 
