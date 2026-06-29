@@ -61,7 +61,9 @@ public class Main extends Application {
 
 
         // clicking logic
-        SelectionController controller = new SelectionController(board, view, bot);
+        MoveDecider moveDecider = new MoveDecider(board, bot, /* humanIsWhite */ false, /* searchDepth */ 5);
+        SelectionController controller = new SelectionController(board, view, moveDecider);
+        moveDecider.setOnBotMoveApplied(controller::clearSelection);
 
         view.canvas.setOnMouseClicked(e -> {
             int sq = Utils.intFromCoordinates(e.getX(), e.getY(), view.getSquareSize());

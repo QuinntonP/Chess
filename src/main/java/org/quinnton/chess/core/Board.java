@@ -261,7 +261,7 @@ public class Board {
         mailbox[to] = placed;
 
         // -------------------------
-        // CASTLING rook move
+        // CASTLING rook movemakeMove
         // -------------------------
         if (flags == Move.FLAG_CASTLE_QS || flags == Move.FLAG_CASTLE_KS) {
             if (mover.isWhite()) {

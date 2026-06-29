@@ -1,7 +1,5 @@
 package org.quinnton.chess.core;
 
-import org.quinnton.chess.bot.Bot;
-
 import java.util.HashSet;
 import java.util.Set;
 
@@ -9,52 +7,31 @@ public class SelectionController {
 
     private final Board board;
     private final BoardView view;
-    private final Bot bot;
+    private final MoveDecider moveDecider;
 
     private Integer selectedFrom = null;
-
     // Promotion UI state
     private int pendingPromotionBaseMove = 0; // encoded move (one of the promo moves; we’ll swap promo piece later)
     private boolean decidingPromotion = false;
 
-    public SelectionController(Board board, BoardView view, Bot bot) {
+    public SelectionController(Board board, BoardView view, MoveDecider moveDecider) {
         this.board = board;
         this.view = view;
-        this.bot = bot;
-    }
-
-    private void tryBotMove() {
-        if (board.gameOver) return;
-
-        boolean botPlaysWhite = false; // example
-        boolean whiteToMove = board.getTurnCounter();
-        boolean botToMove = (whiteToMove == botPlaysWhite);
-
-        if (!botToMove) return;
-
-        new Thread(() -> {
-            Board searchBoard = board.copy();
-            int best = bot.findBestMove(searchBoard, 5); // now returns encoded int
-            if (best == 0) return;
-
-            javafx.application.Platform.runLater(() -> {
-                board.makeMove(best);
-                board.addTurnCounter();
-                board.setLastMove(best);
-                board.lookForCheckmate();
-                clearSelection();
-            });
-        }, "Bot-Search-Thread").start();
+        this.moveDecider = moveDecider;
     }
 
     public void onSquareClick(int sq) {
+
+        // Only the human gets to interact, and only on their turn.
+        if (!moveDecider.isHumanTurn()) return;
+
+        boolean humanIsWhite = moveDecider.isHumanWhite();
 
         // ------------------------------------------------------------
         // Promotion choice mode
         // ------------------------------------------------------------
         if (decidingPromotion) {
-            boolean isWhite = board.getTurnCounter();
-            Piece choice = promoChoiceFromSquare(sq, isWhite);
+            Piece choice = promoChoiceFromSquare(sq, humanIsWhite);
 
             if (choice != null && pendingPromotionBaseMove != 0) {
                 int from = Move.from(pendingPromotionBaseMove);
@@ -66,10 +43,13 @@ public class SelectionController {
 
                 int finalMove = Move.pack(from, to, pawn, cap, choice, flags);
 
-                board.makeMove(finalMove);
-                board.addTurnCounter();
-                board.setLastMove(finalMove);
-                board.lookForCheckmate();
+                decidingPromotion = false;
+                pendingPromotionBaseMove = 0;
+                view.setDrawPawnPromotion(false);
+                clearSelection();
+
+                moveDecider.submitHumanMove(finalMove);
+                return;
             }
 
             decidingPromotion = false;
@@ -83,12 +63,11 @@ public class SelectionController {
         // Normal click logic
         // ------------------------------------------------------------
         Piece clicked = board.getPieceAtSquare(sq);
-        boolean whiteToMove = board.getTurnCounter();
 
         // If nothing selected, you can only select your own piece
         if (selectedFrom == null) {
             if (clicked == null) return;
-            if (clicked.white != whiteToMove) {
+            if (clicked.white != humanIsWhite) {
                 clearSelection();
                 return;
             }
@@ -123,13 +102,8 @@ public class SelectionController {
         }
 
         // Normal move
-        board.makeMove(move);
-        board.addTurnCounter();
-        board.setLastMove(move);
-        board.lookForCheckmate();
         clearSelection();
-
-        tryBotMove();
+        moveDecider.submitHumanMove(move);
     }
 
     private void showHighlights() {
@@ -152,7 +126,7 @@ public class SelectionController {
         view.setHighlights(squares);
     }
 
-    private void clearSelection() {
+    public void clearSelection() {
         selectedFrom = null;
         view.clearHighlights();
     }
