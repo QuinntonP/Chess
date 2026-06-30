@@ -21,8 +21,7 @@ public class Main extends Application {
         Bot bot = new Bot(); // your search class
         Masks masks = new Masks();
 
-//        String fenString = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 ";
-        String fenString = "k7/8/8/8/8/8/8/K5RR w - - 0 1";
+        String fenString = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 ";
 
         // setup
         Board board = new Board(masks);

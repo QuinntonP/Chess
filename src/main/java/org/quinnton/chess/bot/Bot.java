@@ -4,12 +4,33 @@ import org.quinnton.chess.core.Board;
 import org.quinnton.chess.core.Move;
 import org.quinnton.chess.core.MoveGen;
 
+import java.util.Random;
+
 public class Bot {
 
     private static final int MATE = 1_000_000;
     private static final int MAX_MOVES = 256;
 
     private long nodes;
+
+    // Seeded RNG used only to break ties between equally-best moves, so repeated
+    // games are not byte-for-byte identical. The default seed varies per instance
+    // (different games diverge); pass an explicit seed for reproducible play.
+    private final long seed;
+    private final Random rng;
+
+    public Bot() {
+        this(System.nanoTime());
+    }
+
+    public Bot(long seed) {
+        this.seed = seed;
+        this.rng = new Random(seed);
+    }
+
+    public long getSeed() {
+        return seed;
+    }
 
     private void resetStats() {
         nodes = 0;
@@ -109,38 +130,65 @@ public class Bot {
         int moveCount = MoveGen.generateLegalMovesFlat(board, board.masks, moves);
 
         boolean maximizing = board.getTurnCounter();
-        int bestMove = 0; // 0 = none
         int bestScore = maximizing ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+
+        // every move that is provably tied for the best score
+        int[] bestMoves = new int[moveCount];
+        int bestCount = 0;
 
         int alpha = Integer.MIN_VALUE + 1;
         int beta  = Integer.MAX_VALUE;
 
         for (int i = 0; i < moveCount; i++) {
             int m = moves[i];
-
-            Evaluate.EvalUndo undo = board.evaluate.updateMakeMove(m);
-            board.makeMoveInternal(m);
-
-            int score = alphaBeta(board, depth - 1, 1, alpha, beta);
-
-            board.unmakeMoveInternal(m);
-            board.evaluate.updateUnmakeMove(undo);
+            int score = scoreMove(board, m, depth, alpha, beta);
 
             if (maximizing) {
                 if (score > bestScore) {
+                    // strictly better, and (alpha < score < beta) so the value is exact
                     bestScore = score;
-                    bestMove = m;
+                    bestMoves[0] = m;
+                    bestCount = 1;
+                    alpha = Math.max(alpha, bestScore);
+                } else if (score == bestScore && isExactTie(board, m, depth, bestScore)) {
+                    bestMoves[bestCount++] = m;
                 }
-                alpha = Math.max(alpha, bestScore);
             } else {
                 if (score < bestScore) {
                     bestScore = score;
-                    bestMove = m;
+                    bestMoves[0] = m;
+                    bestCount = 1;
+                    beta = Math.min(beta, bestScore);
+                } else if (score == bestScore && isExactTie(board, m, depth, bestScore)) {
+                    bestMoves[bestCount++] = m;
                 }
-                beta = Math.min(beta, bestScore);
             }
         }
 
-        return bestMove;
+        if (bestCount == 0) return 0; // 0 = none (no legal moves)
+        if (bestCount == 1) return bestMoves[0];
+        return bestMoves[rng.nextInt(bestCount)];
+    }
+
+    // Apply m, search the resulting position to `depth - 1`, then unmake it.
+    private int scoreMove(Board board, int m, int depth, int alpha, int beta) {
+        Evaluate.EvalUndo undo = board.evaluate.updateMakeMove(m);
+        board.makeMoveInternal(m);
+
+        int score = alphaBeta(board, depth - 1, 1, alpha, beta);
+
+        board.unmakeMoveInternal(m);
+        board.evaluate.updateUnmakeMove(undo);
+        return score;
+    }
+
+    /**
+     * A move that merely *returns* the current best score under a narrowed window
+     * may only be a fail-low/high bound, not its true value. Re-search it with a
+     * full window so we never add an inferior move to the tie pool.
+     */
+    private boolean isExactTie(Board board, int m, int depth, int bestScore) {
+        int exact = scoreMove(board, m, depth, Integer.MIN_VALUE + 1, Integer.MAX_VALUE);
+        return exact == bestScore;
     }
 }
