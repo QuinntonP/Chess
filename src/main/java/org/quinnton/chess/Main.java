@@ -61,9 +61,10 @@ public class Main extends Application {
 
 
         // clicking logic
-        MoveDecider moveDecider = new MoveDecider(board, bot, /* humanIsWhite */ true, /* searchDepth */ 5);
+        MoveDecider moveDecider = new MoveDecider(board, bot, /* humanIsWhite */ false, /* searchDepth */ 5, /* budgetMillis */ 5000);
         SelectionController controller = new SelectionController(board, view, moveDecider);
         moveDecider.setOnBotMoveApplied(controller::clearSelection);
+        moveDecider.start(); // lets the bot open if it plays the first move (human is Black)
 
         view.canvas.setOnMouseClicked(e -> {
             int sq = Utils.intFromCoordinates(e.getX(), e.getY(), view.getSquareSize());
