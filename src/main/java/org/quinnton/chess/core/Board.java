@@ -353,8 +353,8 @@ public class Board {
             enPassantSquare = -1;
         }
 
-        // castling rights flags (based on what moved)
-        checkCastlingPieces(from);
+        // castling rights flags (based on what moved, and any rook captured on its corner)
+        checkCastlingPieces(from, to);
 
         // restore prevEp not used here (kept in internal undo stack instead)
         // kept line to avoid “unused” confusion:
@@ -739,7 +739,19 @@ public class Board {
     }
 
 
-    private void checkCastlingPieces(int square) {
+    /**
+     * Revoke castling rights touched by a move. {@code from} covers a king or rook
+     * leaving its home square; {@code to} covers a rook being captured on its home
+     * square (the captured side must also lose the matching right). The king cases
+     * (e1/e8) can never be a capture target, so applying this to {@code to} only ever
+     * re-sets an already-revoked flag — harmless.
+     */
+    private void checkCastlingPieces(int from, int to) {
+        revokeCastlingForSquare(from);
+        revokeCastlingForSquare(to);
+    }
+
+    private void revokeCastlingForSquare(int square) {
         switch (square) {
             case 0  -> whiteQueenRookHasMoved = true;
             case 7  -> whiteKingRookHasMoved = true;
@@ -835,8 +847,8 @@ public class Board {
             enPassantSquare = (from + to) / 2;
         }
 
-        // update castling rights if king/rook moved
-        checkCastlingPieces(from);
+        // update castling rights if king/rook moved (or a rook was captured on its corner)
+        checkCastlingPieces(from, to);
 
         if (mover == Piece.WK){
             whiteKingSquare = to;
