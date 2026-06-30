@@ -10,15 +10,9 @@ public class Bot {
     private static final int MAX_MOVES = 256;
 
     private long nodes;
-    private long startNanos;
 
     private void resetStats() {
         nodes = 0;
-        startNanos = System.nanoTime();
-    }
-
-    private long elapsedMillis() {
-        return (System.nanoTime() - startNanos) / 1_000_000L;
     }
 
     public long getNodes() {
@@ -105,14 +99,6 @@ public class Bot {
                 Integer.MAX_VALUE
         );
 
-        long ms = elapsedMillis();
-        double nps = ms > 0 ? (nodes * 1000.0) / ms : nodes;
-
-        System.out.printf(
-                "Bot search depth=%d time=%dms nodes=%d nps=%.0f score=%d%n",
-                depth, ms, nodes, nps, score
-        );
-
         return score;
     }
 
@@ -154,19 +140,6 @@ public class Bot {
                 beta = Math.min(beta, bestScore);
             }
         }
-
-        long ms = elapsedMillis();
-        double nps = ms > 0 ? (nodes * 1000.0) / ms : nodes;
-
-        System.out.printf(
-                "Bot findBestMove depth=%d time=%dms nodes=%d nps=%.0f best=%s score=%d%n",
-                depth,
-                ms,
-                nodes,
-                nps,
-                bestMove == 0 ? "null" : Move.toUci(bestMove),
-                bestScore
-        );
 
         return bestMove;
     }

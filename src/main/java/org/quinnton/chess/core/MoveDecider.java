@@ -55,6 +55,7 @@ public class MoveDecider {
         board.addTurnCounter();
         board.setLastMove(move);
         board.lookForCheckmate();
+        board.lookForDraw(move);
     }
 
     private void maybeGenBotMove() {

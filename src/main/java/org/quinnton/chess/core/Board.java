@@ -48,9 +48,24 @@ public class Board {
     public boolean blackInCheck;
 
     // --- game state flags ---
+    public enum EndReason {
+        NONE, CHECKMATE, STALEMATE, FIFTY_MOVE, THREEFOLD_REPETITION, INSUFFICIENT_MATERIAL
+    }
+
     public boolean gameOver = false;
     boolean stalemate = false;
     Boolean winnerIsWhite = null; // null = no winner yet / draw
+    EndReason endReason = EndReason.NONE;
+
+    // --- draw tracking ---
+    // half-moves since the last pawn move or capture (50-move rule => 100 half-moves)
+    private int halfmoveClock = 0;
+    // how many times each position has occurred since the last irreversible move
+    private final java.util.HashMap<Long, Integer> positionCounts = new java.util.HashMap<>();
+
+    // square-colour masks (a1 is a dark square)
+    private static final long DARK_SQUARES  = 0xAA55AA55AA55AA55L;
+    private static final long LIGHT_SQUARES = ~DARK_SQUARES;
 
     int whiteKingSquare;
     int blackKingSquare;
@@ -121,6 +136,15 @@ public class Board {
         return winnerIsWhite;
     }
 
+    public EndReason getEndReason() {
+        return endReason;
+    }
+
+    /** Half-moves since the last pawn move or capture (50-move rule triggers at 100). */
+    public int getHalfmoveClock() {
+        return halfmoveClock;
+    }
+
     // ------------------------------------------------------------
     // FEN
     // ------------------------------------------------------------
@@ -136,6 +160,10 @@ public class Board {
         gameOver = false;
         stalemate = false;
         winnerIsWhite = null;
+        endReason = EndReason.NONE;
+
+        halfmoveClock = 0;
+        positionCounts.clear();
 
         lastMove = -1;
         lastWhiteMove = -1;
@@ -150,6 +178,12 @@ public class Board {
         String sideToMove = (fields.length > 1) ? fields[1] : "w";
         String castling   = (fields.length > 2) ? fields[2] : "-";
         String epField    = (fields.length > 3) ? fields[3] : "-";
+
+        // halfmove clock field (50-move rule); ignore a malformed value
+        if (fields.length > 4) {
+            try { halfmoveClock = Math.max(0, Integer.parseInt(fields[4])); }
+            catch (NumberFormatException ignored) { halfmoveClock = 0; }
+        }
 
         // --- 1) Piece placement ---
         int rank = 7;
@@ -229,6 +263,9 @@ public class Board {
 
         // initial legal moves
         legalMoveCount = MoveGen.generateLegalMovesFlat(this, masks, legalMoves);
+
+        // record the starting position as the first occurrence for repetition detection
+        positionCounts.put(positionKey(), 1);
 
         evaluate = new Evaluate(this);
     }
@@ -332,8 +369,6 @@ public class Board {
         }
 
         lookForChecks();
-
-        System.out.println("Checking whiteking square" + whiteKingSquare);
     }
 
     public void setLastMove(int m) {
@@ -484,7 +519,6 @@ public class Board {
                             ((b & Masks.NOT_FILE_A) << 9);    // attacker from sq-9
 
             if ((attacks & pawns) != 0) {
-//                System.out.println("In check from black pawn");
                 return true;
             }
         } else { // is black king in check? -> attacked by WHITE pawns
@@ -502,14 +536,12 @@ public class Board {
             // Knight
             long knightAttacks = Masks.knightMoves.get(sq);
             if ((knightAttacks & getBitboard(Piece.BN)) != 0){
-//                System.out.println("In check from Knight");
                 return true;
             }
 
             // Kings
             long kingAttacks = Masks.kingMoves.get(sq);
             if ((kingAttacks & getBitboard(Piece.BK)) != 0){
-//                System.out.println("In check from Black king");
                 return true;
             }
 
@@ -518,7 +550,6 @@ public class Board {
             long bishopAttacks = masks.getBishopMoves(sq, bSubset);
 
             if ((bishopAttacks & getBitboard(Piece.BB)) != 0 || (bishopAttacks & getBitboard(Piece.BQ)) != 0){
-//                System.out.println("In check from Queen or bishop diag");
                 return true;
             }
 
@@ -527,7 +558,6 @@ public class Board {
             long rookAttacks = masks.getRookMoves(sq, rSubset);
 
             if ((rookAttacks & getBitboard(Piece.BR)) != 0 || (rookAttacks & getBitboard(Piece.BQ)) != 0){
-//                System.out.println("In check from Rook or Queen straight");
                 return true;
             }
         }
@@ -535,14 +565,12 @@ public class Board {
             // Knight
             long knightAttacks = Masks.knightMoves.get(sq);
             if ((knightAttacks & getBitboard(Piece.WN)) != 0) {
-//                System.out.println("In check from Knight");
                 return true;
             }
 
             // King
             long kingAttacks = Masks.kingMoves.get(sq);
             if ((kingAttacks & getBitboard(Piece.WK)) != 0) {
-//                System.out.println("In check from White king");
                 return true;
             }
 
@@ -552,7 +580,6 @@ public class Board {
 
             if ((bishopAttacks & getBitboard(Piece.WB)) != 0 ||
                     (bishopAttacks & getBitboard(Piece.WQ)) != 0) {
-//                System.out.println("In check from Queen or bishop diag");
                 return true;
             }
 
@@ -562,7 +589,6 @@ public class Board {
 
             if ((rookAttacks & getBitboard(Piece.WR)) != 0 ||
                     (rookAttacks & getBitboard(Piece.WQ)) != 0) {
-//                System.out.println("In check from Rook or Queen straight");
                 return true;
             }
         }
@@ -582,20 +608,126 @@ public class Board {
             gameOver = true;
             stalemate = false;
             winnerIsWhite = Boolean.FALSE;
+            endReason = EndReason.CHECKMATE;
             System.out.println("Checkmate Black wins");
         } else if (blackInCheck) {
             // black is to move, in check, no legal moves -> white wins
             gameOver = true;
             stalemate = false;
             winnerIsWhite = Boolean.TRUE;
+            endReason = EndReason.CHECKMATE;
             System.out.println("Checkmate White wins");
         } else {
             // no legal moves and not in check -> stalemate (draw)
             gameOver = true;
             stalemate = true;
             winnerIsWhite = null;
+            endReason = EndReason.STALEMATE;
             System.out.println("Stalemate");
         }
+    }
+
+    /**
+     * Detect the three automatic draws: threefold repetition, the 50-move rule,
+     * and insufficient mating material. Updates the 50-move clock and repetition
+     * history as a side effect, so it must be called exactly once per real move
+     * (after the turn has been advanced). No-ops once the game is already over,
+     * so a checkmate/stalemate detected first always takes precedence.
+     *
+     * @param move the encoded move that was just applied
+     */
+    public void lookForDraw(int move) {
+        if (gameOver) return;
+
+        // 50-move rule clock: resets on a pawn move or capture, which are also
+        // the only moves that make earlier positions unreachable again.
+        Piece mover = Move.piece(move);
+        boolean irreversible = Move.isCapture(move)
+                || mover == Piece.WP || mover == Piece.BP;
+        if (irreversible) {
+            halfmoveClock = 0;
+            positionCounts.clear();
+        } else {
+            halfmoveClock++;
+        }
+
+        // threefold repetition
+        int repeats = positionCounts.merge(positionKey(), 1, Integer::sum);
+        if (repeats >= 3) {
+            setDraw(EndReason.THREEFOLD_REPETITION, "Draw by threefold repetition");
+            return;
+        }
+
+        // 50-move rule (100 half-moves without a pawn move or capture)
+        if (halfmoveClock >= 100) {
+            setDraw(EndReason.FIFTY_MOVE, "Draw by the 50-move rule");
+            return;
+        }
+
+        // insufficient material
+        if (isInsufficientMaterial()) {
+            setDraw(EndReason.INSUFFICIENT_MATERIAL, "Draw by insufficient material");
+            return;
+        }
+    }
+
+    private void setDraw(EndReason reason, String message) {
+        gameOver = true;
+        stalemate = false;
+        winnerIsWhite = null;
+        endReason = reason;
+        System.out.println(message);
+    }
+
+    /**
+     * @return true if neither side has the material needed to force checkmate.
+     * Covers K vs K, K+minor vs K, and any number of bishops as long as they all
+     * sit on the same colour. Pawns, rooks and queens always count as sufficient.
+     */
+    public boolean isInsufficientMaterial() {
+        long pawns   = getBitboard(Piece.WP) | getBitboard(Piece.BP);
+        long rooks   = getBitboard(Piece.WR) | getBitboard(Piece.BR);
+        long queens  = getBitboard(Piece.WQ) | getBitboard(Piece.BQ);
+        if ((pawns | rooks | queens) != 0L) return false;
+
+        long bishops = getBitboard(Piece.WB) | getBitboard(Piece.BB);
+        long knights = getBitboard(Piece.WN) | getBitboard(Piece.BN);
+
+        int minors = Long.bitCount(bishops) + Long.bitCount(knights);
+        if (minors <= 1) return true; // K vs K, K+B vs K, K+N vs K
+
+        // only bishops left: a draw iff every bishop is on the same colour
+        if (knights == 0L) {
+            boolean anyLight = (bishops & LIGHT_SQUARES) != 0L;
+            boolean anyDark  = (bishops & DARK_SQUARES)  != 0L;
+            return anyLight != anyDark;
+        }
+
+        return false;
+    }
+
+    /**
+     * A 64-bit key identifying a position for repetition detection: piece
+     * placement, side to move, castling rights and the en-passant square. Two
+     * positions sharing a key are treated as the same for the threefold rule.
+     */
+    private long positionKey() {
+        long h = 1125899906842597L; // large odd seed
+        for (long bb : bitBoards) {
+            h = h * 0x100000001B3L + bb; // FNV-style mix
+            h ^= (h >>> 31);
+        }
+        h = h * 0x100000001B3L + (getTurnCounter() ? 1 : 0);
+
+        int castle = (whiteKingHasMoved      ? 0 : 1)
+                | (blackKingHasMoved      ? 0 : 2)
+                | (whiteKingRookHasMoved  ? 0 : 4)
+                | (whiteQueenRookHasMoved ? 0 : 8)
+                | (blackKingRookHasMoved  ? 0 : 16)
+                | (blackQueenRookHasMoved ? 0 : 32);
+        h = h * 0x100000001B3L + castle;
+        h = h * 0x100000001B3L + (enPassantSquare + 1); // -1..63 -> 0..64
+        return h;
     }
 
 
@@ -851,6 +983,9 @@ public class Board {
         b.gameOver = this.gameOver;
         b.stalemate = this.stalemate;
         b.winnerIsWhite = this.winnerIsWhite;
+        b.endReason = this.endReason;
+        b.halfmoveClock = this.halfmoveClock;
+        b.positionCounts.putAll(this.positionCounts);
 
         b.whiteKingSquare = this.whiteKingSquare;
         b.blackKingSquare = this.blackKingSquare;
