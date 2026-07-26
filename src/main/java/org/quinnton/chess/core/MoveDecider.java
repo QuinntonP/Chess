@@ -65,11 +65,7 @@ public class MoveDecider {
     }
 
     private void applyMove(int move) {
-        board.makeMove(move);
-        board.addTurnCounter();
-        board.setLastMove(move);
-        board.lookForCheckmate();
-        board.lookForDraw(move);
+        GameRules.applyMove(board, move);
     }
 
     private void maybeGenBotMove() {
