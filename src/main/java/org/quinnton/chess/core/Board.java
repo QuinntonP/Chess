@@ -270,6 +270,68 @@ public class Board {
         evaluate = new Evaluate(this);
     }
 
+    /**
+     * Serialise the current position back to a FEN string — the inverse of
+     * {@link #loadFen(String)}.
+     *
+     * All six fields are emitted. The fullmove number is derived from
+     * {@code turnCounter}, which {@code loadFen} always resets to 0 or 1: the
+     * board never stores the fullmove number from the FEN it was loaded from,
+     * so a position loaded mid-game and then serialised restarts its move
+     * numbering at 1. Nothing in the engine reads that field, but it means
+     * {@code loadFen(x).getFen()} is not always character-identical to {@code x}.
+     *
+     * @return the current position in Forsyth-Edwards notation
+     */
+    public String getFen() {
+        StringBuilder fen = new StringBuilder(80);
+
+        // --- 1) Piece placement, rank 8 down to rank 1 ---
+        for (int rank = 7; rank >= 0; rank--) {
+            int empty = 0;
+            for (int file = 0; file < 8; file++) {
+                Piece piece = mailbox[rank * 8 + file];
+                if (piece == null) {
+                    empty++;
+                    continue;
+                }
+                if (empty > 0) {
+                    fen.append(empty);
+                    empty = 0;
+                }
+                fen.append(piece.symbol);
+            }
+            if (empty > 0) fen.append(empty);
+            if (rank > 0) fen.append('/');
+        }
+
+        // --- 2) Side to move ---
+        fen.append(getTurnCounter() ? " w " : " b ");
+
+        // --- 3) Castling rights ---
+        int before = fen.length();
+        if (!whiteKingHasMoved && !whiteKingRookHasMoved)  fen.append('K');
+        if (!whiteKingHasMoved && !whiteQueenRookHasMoved) fen.append('Q');
+        if (!blackKingHasMoved && !blackKingRookHasMoved)  fen.append('k');
+        if (!blackKingHasMoved && !blackQueenRookHasMoved) fen.append('q');
+        if (fen.length() == before) fen.append('-');
+
+        // --- 4) En-passant target square ---
+        fen.append(' ');
+        if (enPassantSquare < 0) {
+            fen.append('-');
+        } else {
+            fen.append((char) ('a' + (enPassantSquare % 8)));
+            fen.append((char) ('1' + (enPassantSquare / 8)));
+        }
+
+        // --- 5) Halfmove clock and 6) fullmove number ---
+        fen.append(' ').append(halfmoveClock);
+        fen.append(' ').append(turnCounter / 2 + 1);
+
+        return fen.toString();
+    }
+
     // ------------------------------------------------------------
     // UI / Game move (encoded int)
     // NOTE: SelectionController should call addTurnCounter() after this, as before.

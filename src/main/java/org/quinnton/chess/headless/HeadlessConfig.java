@@ -4,12 +4,12 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class HeadlessConfig {
-    private int depth;
-    private long budgetMillis;
-    private int maxPlies;
-    private boolean isWhite;
-    private boolean logMoves;
-    private String FEN;
+    private int depth = 5;
+    private long budgetMillis = 5000;
+    private int maxPlies = HeadlessGameRunner.DEFAULT_MAX_PLIES;
+    private boolean isWhite = true;
+    private boolean logMoves = false;
+    private String FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
     public void setDepth(int depth){
         this.depth = depth;
@@ -44,7 +44,7 @@ public class HeadlessConfig {
     }
 
     public boolean getLogMoves(){
-        return getLogMoves();
+        return this.logMoves;
     }
 
     public void setLogMoves(boolean logMoves){
