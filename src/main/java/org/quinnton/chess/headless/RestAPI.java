@@ -68,9 +68,17 @@ public class RestAPI {
     @GetMapping("/get-checkmate")
     public ResponseEntity<String> getCheckmate() {
         if (game.getBoard().isGameOver()) {
-            return ResponseEntity.ok("checkmate");
+            if (game.getBoard().getWinnerIsWhite() == null){
+                return ResponseEntity.ok("stalemate");
+            }
+            if (game.getBoard().getWinnerIsWhite()){
+                return ResponseEntity.ok("checkmate white");
+            }
+            if (game.getBoard().getWinnerIsWhite() == false){
+                return ResponseEntity.ok("checkmate black");
+            }
         }
-        return ResponseEntity.ok("Game not over");
+        return ResponseEntity.ok("game-not-over");
     }
 
     /**
